@@ -1,0 +1,1 @@
+# Input Agent Directory\n\nThis directory contains example domain models (outputs from Agent 1):\n\n- `example_good.json`: Valid domain model for testing\n- `example_bad.json`: Invalid domain model with intentional errors\n\nThese files will be created later.

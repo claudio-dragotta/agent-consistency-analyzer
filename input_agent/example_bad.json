@@ -1,0 +1,545 @@
+{
+  "$schema": "https://intelligent-domain-architect.io/schemas/domain-model/v1.json",
+  "metadata": {
+    "modelId": "dm-ecommerce-bad-001",
+    "version": "1.0.0",
+    "createdAt": "2025-01-15T10:00:00Z",
+    "createdBy": "agent-1-domain-interviewer",
+    "projectName": "E-Commerce Platform (With Issues)",
+    "description": "Domain model with intentional problems for testing Agent 2 validation."
+  },
+
+  "_testingNotes": {
+    "description": "This model contains intentional problems for testing the Consistency & Conflict Analyzer",
+    "expectedProblems": [
+      "ENTITY_OVERLAP: Product entity duplicated in Order Management and Product Catalog",
+      "ENTITY_OVERLAP: Customer entity duplicated in Order Management and Customer Management", 
+      "REQUIREMENT_CONFLICT: Price immutability conflicts with retroactive coupon requirement",
+      "REQUIREMENT_CONFLICT: Strong consistency vs eventual consistency conflict",
+      "SEMANTIC_AMBIGUITY: Transaction entity is ambiguous",
+      "SEMANTIC_AMBIGUITY: Item term used inconsistently",
+      "DUPLICATE_EVENT: OrderCreated emitted by two domains",
+      "INCOMPATIBLE_PATTERN: Sync requirement with async-only communication",
+      "NAMING_VIOLATION: Events not in past tense",
+      "MISCLASSIFIED_DOMAIN: Authentication classified as Core instead of Generic"
+    ]
+  },
+
+  "businessContext": {
+    "objectives": [
+      "Enable customers to browse products and place orders online",
+      "Process payments securely",
+      "Manage inventory and product catalog",
+      "Handle shipping and delivery"
+    ],
+    "boundaries": [
+      "B2C e-commerce only",
+      "Single currency (EUR)",
+      "Domestic shipping only"
+    ]
+  },
+
+  "domainMap": {
+    "coreDomains": [
+      {
+        "id": "order-management",
+        "name": "Order Management",
+        "type": "core",
+        "description": "Handles customer orders",
+        "boundedContext": {
+          "name": "OrderContext",
+          "ubiquitousLanguage": {
+            "Order": "A customer purchase request",
+            "Item": "A product in an order",
+            "Transaction": "Any operation in the system"
+          }
+        },
+        "entities": [
+          {
+            "name": "Order",
+            "type": "aggregate-root",
+            "identity": "orderId (UUID)",
+            "lifecycle": ["Draft", "Confirmed", "Paid", "Shipped", "Delivered"],
+            "attributes": [
+              {"name": "orderId", "type": "UUID", "required": true},
+              {"name": "customerId", "type": "UUID", "required": true},
+              {"name": "items", "type": "List<Item>", "required": true},
+              {"name": "totalAmount", "type": "Money", "required": true}
+            ]
+          },
+          {
+            "name": "Product",
+            "type": "entity",
+            "identity": "productId (UUID)",
+            "attributes": [
+              {"name": "productId", "type": "UUID", "required": true},
+              {"name": "name", "type": "String", "required": true},
+              {"name": "price", "type": "Money", "required": true},
+              {"name": "stockLevel", "type": "Integer", "required": true}
+            ]
+          },
+          {
+            "name": "Customer",
+            "type": "entity", 
+            "identity": "customerId (UUID)",
+            "attributes": [
+              {"name": "customerId", "type": "UUID", "required": true},
+              {"name": "email", "type": "String", "required": true},
+              {"name": "name", "type": "String", "required": true},
+              {"name": "loyaltyPoints", "type": "Integer", "required": false}
+            ]
+          },
+          {
+            "name": "Transaction",
+            "type": "entity",
+            "identity": "transactionId (UUID)",
+            "attributes": [
+              {"name": "transactionId", "type": "UUID", "required": true},
+              {"name": "type", "type": "String", "required": true},
+              {"name": "amount", "type": "Decimal", "required": false},
+              {"name": "data", "type": "Object", "required": false}
+            ]
+          }
+        ],
+        "functionalRequirements": [
+          {
+            "id": "FR-ORD-001",
+            "description": "Customer can create an order",
+            "priority": "must-have"
+          },
+          {
+            "id": "FR-ORD-002",
+            "description": "Order price is IMMUTABLE after confirmation - cannot be changed for any reason",
+            "priority": "must-have"
+          },
+          {
+            "id": "FR-ORD-003",
+            "description": "Customer can apply retroactive discount coupons within 24 hours of order confirmation, which modifies the order total",
+            "priority": "must-have"
+          },
+          {
+            "id": "FR-ORD-004",
+            "description": "Order status must be IMMEDIATELY consistent across all services (strong consistency required)",
+            "priority": "must-have"
+          }
+        ]
+      },
+      {
+        "id": "product-catalog",
+        "name": "Product Catalog",
+        "type": "core",
+        "description": "Manages product information",
+        "boundedContext": {
+          "name": "CatalogContext",
+          "ubiquitousLanguage": {
+            "Product": "An item for sale",
+            "Item": "A thing in the catalog",
+            "Category": "Product grouping"
+          }
+        },
+        "entities": [
+          {
+            "name": "Product",
+            "type": "aggregate-root",
+            "identity": "productId (UUID)",
+            "attributes": [
+              {"name": "productId", "type": "UUID", "required": true},
+              {"name": "sku", "type": "String", "required": true},
+              {"name": "name", "type": "String", "required": true},
+              {"name": "description", "type": "String", "required": true},
+              {"name": "price", "type": "Money", "required": true},
+              {"name": "categoryId", "type": "UUID", "required": true}
+            ]
+          },
+          {
+            "name": "Category",
+            "type": "aggregate-root",
+            "identity": "categoryId (UUID)",
+            "attributes": [
+              {"name": "categoryId", "type": "UUID", "required": true},
+              {"name": "name", "type": "String", "required": true}
+            ]
+          }
+        ],
+        "functionalRequirements": [
+          {
+            "id": "FR-CAT-001",
+            "description": "Customer can browse products",
+            "priority": "must-have"
+          },
+          {
+            "id": "FR-CAT-002",
+            "description": "Admin can update product prices at any time, changes reflect immediately in all orders",
+            "priority": "must-have"
+          }
+        ]
+      },
+      {
+        "id": "authentication",
+        "name": "Authentication & Security",
+        "type": "core",
+        "description": "Handles user authentication and authorization",
+        "boundedContext": {
+          "name": "AuthContext",
+          "ubiquitousLanguage": {
+            "User": "An authenticated person",
+            "Session": "Active login period",
+            "Token": "Authentication credential"
+          }
+        },
+        "entities": [
+          {
+            "name": "User",
+            "type": "aggregate-root",
+            "identity": "userId (UUID)",
+            "attributes": [
+              {"name": "userId", "type": "UUID", "required": true},
+              {"name": "username", "type": "String", "required": true},
+              {"name": "passwordHash", "type": "String", "required": true}
+            ]
+          }
+        ],
+        "functionalRequirements": [
+          {
+            "id": "FR-AUTH-001",
+            "description": "User can login with username and password",
+            "priority": "must-have"
+          }
+        ]
+      }
+    ],
+
+    "supportingDomains": [
+      {
+        "id": "payment-processing",
+        "name": "Payment Processing",
+        "type": "supporting",
+        "description": "Handles payments",
+        "supportsCoreDomains": ["order-management"],
+        "boundedContext": {
+          "name": "PaymentContext",
+          "ubiquitousLanguage": {
+            "Payment": "Money transfer for an order",
+            "Transaction": "A payment operation"
+          }
+        },
+        "entities": [
+          {
+            "name": "Payment",
+            "type": "aggregate-root",
+            "identity": "paymentId (UUID)",
+            "attributes": [
+              {"name": "paymentId", "type": "UUID", "required": true},
+              {"name": "orderId", "type": "UUID", "required": true},
+              {"name": "amount", "type": "Money", "required": true},
+              {"name": "status", "type": "String", "required": true}
+            ]
+          },
+          {
+            "name": "Transaction",
+            "type": "entity",
+            "identity": "transactionId (UUID)",
+            "attributes": [
+              {"name": "transactionId", "type": "UUID", "required": true},
+              {"name": "paymentId", "type": "UUID", "required": true},
+              {"name": "type", "type": "String", "required": true}
+            ]
+          }
+        ],
+        "functionalRequirements": [
+          {
+            "id": "FR-PAY-001",
+            "description": "Process payment for orders",
+            "priority": "must-have"
+          },
+          {
+            "id": "FR-PAY-002",
+            "description": "Payment status must be queried synchronously with sub-100ms response time",
+            "priority": "must-have"
+          }
+        ]
+      },
+      {
+        "id": "shipping",
+        "name": "Shipping",
+        "type": "supporting",
+        "description": "Handles shipments",
+        "supportsCoreDomains": ["order-management"],
+        "boundedContext": {
+          "name": "ShippingContext",
+          "ubiquitousLanguage": {
+            "Shipment": "Package delivery",
+            "Item": "Thing being shipped"
+          }
+        },
+        "entities": [
+          {
+            "name": "Shipment",
+            "type": "aggregate-root",
+            "identity": "shipmentId (UUID)",
+            "attributes": [
+              {"name": "shipmentId", "type": "UUID", "required": true},
+              {"name": "orderId", "type": "UUID", "required": true},
+              {"name": "status", "type": "String", "required": true}
+            ]
+          }
+        ],
+        "functionalRequirements": [
+          {
+            "id": "FR-SHP-001",
+            "description": "Create shipment for paid orders",
+            "priority": "must-have"
+          }
+        ]
+      },
+      {
+        "id": "customer-management",
+        "name": "Customer Management",
+        "type": "supporting",
+        "description": "Manages customer data",
+        "supportsCoreDomains": ["order-management"],
+        "boundedContext": {
+          "name": "CustomerContext",
+          "ubiquitousLanguage": {
+            "Customer": "A registered buyer",
+            "Profile": "Customer information"
+          }
+        },
+        "entities": [
+          {
+            "name": "Customer",
+            "type": "aggregate-root",
+            "identity": "customerId (UUID)",
+            "attributes": [
+              {"name": "customerId", "type": "UUID", "required": true},
+              {"name": "email", "type": "String", "required": true},
+              {"name": "name", "type": "String", "required": true},
+              {"name": "addresses", "type": "List<Address>", "required": false},
+              {"name": "preferences", "type": "Object", "required": false}
+            ]
+          }
+        ],
+        "functionalRequirements": [
+          {
+            "id": "FR-CUS-001",
+            "description": "Customer can manage their profile",
+            "priority": "must-have"
+          }
+        ]
+      },
+      {
+        "id": "inventory",
+        "name": "Inventory",
+        "type": "supporting",
+        "description": "Tracks stock",
+        "supportsCoreDomains": ["product-catalog", "order-management"],
+        "boundedContext": {
+          "name": "InventoryContext",
+          "ubiquitousLanguage": {
+            "Stock": "Available quantity",
+            "Item": "Inventory record"
+          }
+        },
+        "entities": [
+          {
+            "name": "StockItem",
+            "type": "aggregate-root",
+            "identity": "stockItemId (UUID)",
+            "attributes": [
+              {"name": "stockItemId", "type": "UUID", "required": true},
+              {"name": "productId", "type": "UUID", "required": true},
+              {"name": "quantity", "type": "Integer", "required": true}
+            ]
+          }
+        ],
+        "functionalRequirements": [
+          {
+            "id": "FR-INV-001",
+            "description": "Reserve stock for orders",
+            "priority": "must-have"
+          }
+        ]
+      }
+    ],
+
+    "genericDomains": [
+      {
+        "id": "notification",
+        "name": "Notification",
+        "type": "generic",
+        "description": "Sends notifications",
+        "functionalRequirements": [
+          {
+            "id": "FR-NOT-001",
+            "description": "Send email notifications",
+            "priority": "must-have"
+          }
+        ]
+      }
+    ]
+  },
+
+  "eventDrivenModel": {
+    "events": [
+      {
+        "name": "OrderCreated",
+        "emitter": "order-management",
+        "description": "Emitted when order is created",
+        "payload": {
+          "orderId": "UUID",
+          "customerId": "UUID"
+        },
+        "consumers": ["inventory", "notification"]
+      },
+      {
+        "name": "OrderCreated",
+        "emitter": "product-catalog",
+        "description": "Also emits OrderCreated - DUPLICATE EMITTER PROBLEM",
+        "payload": {
+          "orderId": "UUID",
+          "products": "List"
+        },
+        "consumers": ["inventory"]
+      },
+      {
+        "name": "ProcessPayment",
+        "emitter": "payment-processing",
+        "description": "Payment processing event - NAMING PROBLEM (should be past tense)",
+        "payload": {
+          "paymentId": "UUID",
+          "amount": "Money"
+        },
+        "consumers": ["order-management"]
+      },
+      {
+        "name": "ShipOrder",
+        "emitter": "shipping",
+        "description": "Shipping event - NAMING PROBLEM (should be past tense)",
+        "payload": {
+          "shipmentId": "UUID",
+          "orderId": "UUID"
+        },
+        "consumers": ["order-management", "notification"]
+      },
+      {
+        "name": "Update",
+        "emitter": "inventory",
+        "description": "Generic update event - NAMING PROBLEM (too vague)",
+        "payload": {
+          "itemId": "UUID",
+          "quantity": "Integer"
+        },
+        "consumers": ["product-catalog"]
+      },
+      {
+        "name": "CustomerRegistered",
+        "emitter": "customer-management",
+        "description": "Correct event naming - for comparison",
+        "payload": {
+          "customerId": "UUID",
+          "email": "String"
+        },
+        "consumers": ["notification"]
+      }
+    ],
+    "patterns": {
+      "primary": "pub-sub",
+      "messaging": {
+        "broker": "Apache Kafka",
+        "guarantees": "at-least-once"
+      }
+    }
+  },
+
+  "contextIntegrations": [
+    {
+      "upstream": "order-management",
+      "downstream": "payment-processing",
+      "relationship": "customer-supplier",
+      "integrationPattern": "event-driven-async"
+    },
+    {
+      "upstream": "order-management",
+      "downstream": "shipping",
+      "relationship": "customer-supplier",
+      "integrationPattern": "event-driven-async"
+    }
+  ],
+
+  "_expectedValidationResults": {
+    "description": "Expected problems that Agent 2 should detect",
+    "problems": [
+      {
+        "type": "ENTITY_OVERLAP",
+        "severity": "HIGH",
+        "description": "Product entity exists in both order-management and product-catalog without role differentiation"
+      },
+      {
+        "type": "ENTITY_OVERLAP", 
+        "severity": "HIGH",
+        "description": "Customer entity exists in both order-management and customer-management without role differentiation"
+      },
+      {
+        "type": "REQUIREMENT_CONFLICT",
+        "severity": "HIGH", 
+        "description": "FR-ORD-002 (price immutable) conflicts with FR-ORD-003 (retroactive coupons modify total)"
+      },
+      {
+        "type": "REQUIREMENT_CONFLICT",
+        "severity": "HIGH",
+        "description": "FR-ORD-002 (price immutable) conflicts with FR-CAT-002 (price changes reflect in orders)"
+      },
+      {
+        "type": "REQUIREMENT_CONFLICT",
+        "severity": "HIGH",
+        "description": "FR-ORD-004 (strong consistency) conflicts with async-only event architecture"
+      },
+      {
+        "type": "SEMANTIC_AMBIGUITY",
+        "severity": "MEDIUM",
+        "description": "Transaction entity is ambiguous - appears in order-management and payment-processing with different meanings"
+      },
+      {
+        "type": "SEMANTIC_AMBIGUITY",
+        "severity": "MEDIUM",
+        "description": "Item term used inconsistently across OrderContext, CatalogContext, ShippingContext, InventoryContext"
+      },
+      {
+        "type": "DUPLICATE_EVENT",
+        "severity": "HIGH",
+        "description": "OrderCreated event emitted by both order-management and product-catalog"
+      },
+      {
+        "type": "NAMING_VIOLATION",
+        "severity": "LOW",
+        "description": "ProcessPayment should be PaymentProcessed (past tense)"
+      },
+      {
+        "type": "NAMING_VIOLATION",
+        "severity": "LOW",
+        "description": "ShipOrder should be OrderShipped or ShipmentCreated (past tense)"
+      },
+      {
+        "type": "NAMING_VIOLATION",
+        "severity": "LOW",
+        "description": "Update is too generic - should be StockUpdated or InventoryAdjusted"
+      },
+      {
+        "type": "INCOMPATIBLE_PATTERN",
+        "severity": "MEDIUM",
+        "description": "FR-PAY-002 requires synchronous queries but only async event-driven integration is defined"
+      },
+      {
+        "type": "MISCLASSIFIED_DOMAIN",
+        "severity": "MEDIUM",
+        "description": "Authentication is classified as Core but should be Generic - it is a commodity capability"
+      }
+    ],
+    "summary": {
+      "totalProblems": 13,
+      "highSeverity": 6,
+      "mediumSeverity": 4,
+      "lowSeverity": 3
+    }
+  }
+}

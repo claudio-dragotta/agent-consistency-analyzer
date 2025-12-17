@@ -1,0 +1,516 @@
+{
+  "metadata": {
+    "name": "DDD Validation Checklist",
+    "version": "1.0.0",
+    "description": "Checklist strutturata per l'Agente 2 - Consistency & Conflict Analyzer",
+    "author": "Agent 2 Knowledge Base",
+    "last_updated": "2025-01-15"
+  },
+
+  "validation_rules": {
+    
+    "domain_classification": {
+      "id": "DC",
+      "name": "Domain Classification Validation",
+      "description": "Regole per validare la corretta classificazione dei domini",
+      
+      "rules": [
+        {
+          "id": "DC-001",
+          "name": "Core Domain Differentiation",
+          "description": "Il Core Domain deve essere differenziante per il business",
+          "severity": "HIGH",
+          "check": "Verificare che il Core Domain soddisfi almeno 3 dei 5 criteri di identificazione",
+          "criteria": [
+            "differenziazione_competitiva",
+            "impatto_economico_strategico",
+            "complessita_intrinseca",
+            "frequenza_cambiamento",
+            "sensibilita_errori"
+          ],
+          "minimum_criteria_match": 3,
+          "error_type": "MISCLASSIFIED_DOMAIN",
+          "question_template": "Il dominio '{domain_name}' è classificato come Core, ma sembra essere una commodity. Può confermare che questo dominio rappresenta un vantaggio competitivo per l'organizzazione?"
+        },
+        {
+          "id": "DC-002",
+          "name": "Generic Domain Commodity Check",
+          "description": "I Generic Domain devono essere effettivamente commoditizzabili",
+          "severity": "MEDIUM",
+          "check": "Verificare che i Generic Domain non contengano logica di business specifica",
+          "indicators_of_misclassification": [
+            "regole_business_complesse",
+            "ubiquitous_language_specifico",
+            "frequenti_cambiamenti_requisiti",
+            "impatto_su_kpi_principali"
+          ],
+          "error_type": "MISCLASSIFIED_DOMAIN",
+          "question_template": "Il dominio '{domain_name}' è classificato come Generic, ma contiene logica di business specifica. Dovrebbe essere promosso a Supporting o Core?"
+        },
+        {
+          "id": "DC-003",
+          "name": "Supporting Domain Dependency",
+          "description": "I Supporting Domain devono effettivamente supportare il Core",
+          "severity": "MEDIUM",
+          "check": "Verificare che esista una relazione di supporto con almeno un Core Domain",
+          "error_type": "MISCLASSIFIED_DOMAIN",
+          "question_template": "Il dominio '{domain_name}' è classificato come Supporting, ma non sembra supportare alcun Core Domain. Qual è la sua relazione con il business principale?"
+        }
+      ]
+    },
+
+    "bounded_context": {
+      "id": "BC",
+      "name": "Bounded Context Validation",
+      "description": "Regole per validare la corretta definizione dei Bounded Context",
+      
+      "rules": [
+        {
+          "id": "BC-001",
+          "name": "Ubiquitous Language Consistency",
+          "description": "Ogni termine deve avere lo stesso significato all'interno di un Bounded Context",
+          "severity": "HIGH",
+          "check": "Verificare che lo stesso termine non abbia definizioni diverse nello stesso BC",
+          "error_type": "SEMANTIC_AMBIGUITY",
+          "question_template": "Il termine '{term}' sembra avere significati diversi all'interno del contesto '{context_name}'. Può chiarire la definizione corretta?"
+        },
+        {
+          "id": "BC-002",
+          "name": "Context Boundary Clarity",
+          "description": "I confini tra Bounded Context devono essere espliciti",
+          "severity": "MEDIUM",
+          "check": "Verificare che ogni BC abbia confini chiari e non sovrapposti",
+          "indicators_of_problem": [
+            "stessi_termini_in_piu_contesti_senza_traduzione",
+            "responsabilita_condivise_non_esplicite",
+            "ownership_non_definita"
+          ],
+          "error_type": "SEMANTIC_AMBIGUITY",
+          "question_template": "I confini tra '{context_1}' e '{context_2}' non sono chiari. Quale contesto è responsabile per '{shared_concept}'?"
+        },
+        {
+          "id": "BC-003",
+          "name": "Context Integration Explicit",
+          "description": "Le integrazioni tra BC devono essere esplicite (ACL, Published Language, etc.)",
+          "severity": "MEDIUM",
+          "check": "Verificare che le dipendenze tra BC siano documentate con pattern di integrazione",
+          "valid_integration_patterns": [
+            "shared_kernel",
+            "customer_supplier",
+            "conformist",
+            "anticorruption_layer",
+            "open_host_service",
+            "published_language",
+            "separate_ways"
+          ],
+          "error_type": "INCOMPATIBLE_PATTERN",
+          "question_template": "Come comunicano '{context_1}' e '{context_2}'? È necessario definire un pattern di integrazione esplicito."
+        }
+      ]
+    },
+
+    "entity_value_object": {
+      "id": "EVO",
+      "name": "Entity vs Value Object Validation",
+      "description": "Regole per validare la corretta classificazione di Entity e Value Object",
+      
+      "rules": [
+        {
+          "id": "EVO-001",
+          "name": "Entity Identity Requirement",
+          "description": "Le Entity devono avere un identificatore univoco e un ciclo di vita",
+          "severity": "MEDIUM",
+          "check": "Verificare che ogni Entity abbia un ID e stati del ciclo di vita definiti",
+          "required_attributes": [
+            "identifier",
+            "lifecycle_states"
+          ],
+          "error_type": "SEMANTIC_AMBIGUITY",
+          "question_template": "L'entità '{entity_name}' non ha un identificatore chiaro o un ciclo di vita definito. È effettivamente un'Entity o dovrebbe essere un Value Object?"
+        },
+        {
+          "id": "EVO-002",
+          "name": "Value Object Immutability",
+          "description": "I Value Object devono essere concettualmente immutabili",
+          "severity": "LOW",
+          "check": "Verificare che i VO non abbiano operazioni di modifica (solo sostituzione)",
+          "error_type": "SEMANTIC_AMBIGUITY",
+          "question_template": "Il Value Object '{vo_name}' sembra avere operazioni di modifica. Dovrebbe essere trattato come Entity?"
+        },
+        {
+          "id": "EVO-003",
+          "name": "Common Misclassification Check",
+          "description": "Verificare errori comuni come Address come Entity",
+          "severity": "LOW",
+          "check": "Verificare che concetti tipicamente VO non siano classificati come Entity",
+          "typical_value_objects": [
+            "Address",
+            "Money",
+            "DateRange",
+            "TimeWindow",
+            "GeoPoint",
+            "Email",
+            "PhoneNumber",
+            "Coordinates"
+          ],
+          "error_type": "SEMANTIC_AMBIGUITY",
+          "question_template": "'{concept_name}' è classificato come Entity, ma tipicamente è un Value Object. Ha effettivamente bisogno di identità e ciclo di vita separato?"
+        }
+      ]
+    },
+
+    "entity_ownership": {
+      "id": "EO",
+      "name": "Entity Ownership Validation",
+      "description": "Regole per validare che ogni Entity abbia un solo owner",
+      
+      "rules": [
+        {
+          "id": "EO-001",
+          "name": "Single Source of Truth",
+          "description": "Ogni Entity deve appartenere a un solo Bounded Context come fonte di verità",
+          "severity": "HIGH",
+          "check": "Verificare che la stessa Entity non appaia in più domini con lo stesso ruolo",
+          "error_type": "ENTITY_OVERLAP",
+          "question_template": "L'entità '{entity_name}' appare sia in '{domain_1}' che in '{domain_2}'. Quale dominio è la fonte di verità?"
+        },
+        {
+          "id": "EO-002",
+          "name": "Role Differentiation",
+          "description": "Se un'Entity appare in più domini, deve avere ruoli esplicitamente diversi",
+          "severity": "HIGH",
+          "check": "Verificare che Entity con stesso nome in domini diversi abbiano nomi/ruoli distinti",
+          "valid_patterns": [
+            "nomi_diversi_per_ruoli_diversi",
+            "prefisso_contesto",
+            "suffisso_ruolo"
+          ],
+          "error_type": "ENTITY_OVERLAP",
+          "question_template": "'{entity_name}' esiste in più domini. Dovrebbero essere rinominati per riflettere i loro ruoli specifici (es. '{suggested_name_1}' e '{suggested_name_2}')?"
+        },
+        {
+          "id": "EO-003",
+          "name": "Reference by ID Only",
+          "description": "I domini non-owner devono riferirsi all'Entity solo tramite ID",
+          "severity": "MEDIUM",
+          "check": "Verificare che i riferimenti cross-domain usino solo ID, non oggetti completi",
+          "error_type": "ENTITY_OVERLAP",
+          "question_template": "Il dominio '{domain_name}' sembra importare l'intera struttura di '{entity_name}' invece di usare solo l'ID. È necessario implementare un Anti-Corruption Layer?"
+        }
+      ]
+    },
+
+    "requirement_consistency": {
+      "id": "RC",
+      "name": "Requirement Consistency Validation",
+      "description": "Regole per validare che i requisiti non si contraddicano",
+      
+      "rules": [
+        {
+          "id": "RC-001",
+          "name": "No Logical Contradiction",
+          "description": "I requisiti di domini diversi non devono contraddirsi logicamente",
+          "severity": "HIGH",
+          "check": "Verificare che non esistano coppie di requisiti che affermano A e non-A sullo stesso concetto",
+          "contradiction_patterns": [
+            "immutabile_vs_modificabile",
+            "sincrono_vs_asincrono_required",
+            "pubblico_vs_privato",
+            "obbligatorio_vs_opzionale",
+            "consistenza_forte_vs_eventuale"
+          ],
+          "error_type": "REQUIREMENT_CONFLICT",
+          "question_template": "Il requisito '{req_1}' in '{domain_1}' sembra contraddire '{req_2}' in '{domain_2}'. Quale requisito ha priorità?"
+        },
+        {
+          "id": "RC-002",
+          "name": "Invariant Compatibility",
+          "description": "Gli invarianti di domini collegati devono essere compatibili",
+          "severity": "HIGH",
+          "check": "Verificare che gli invarianti non creino deadlock o impossibilità logiche",
+          "error_type": "REQUIREMENT_CONFLICT",
+          "question_template": "L'invariante '{invariant_1}' di '{domain_1}' potrebbe entrare in conflitto con '{invariant_2}' di '{domain_2}'. Come devono coesistere?"
+        },
+        {
+          "id": "RC-003",
+          "name": "Temporal Consistency",
+          "description": "I requisiti temporali devono essere compatibili",
+          "severity": "MEDIUM",
+          "check": "Verificare che SLA, timeout, e vincoli temporali siano compatibili tra domini collegati",
+          "error_type": "REQUIREMENT_CONFLICT",
+          "question_template": "Il dominio '{domain_1}' richiede risposta entro {time_1}, ma '{domain_2}' ha SLA di {time_2}. I vincoli temporali sono compatibili?"
+        }
+      ]
+    },
+
+    "event_architecture": {
+      "id": "EA",
+      "name": "Event Architecture Validation",
+      "description": "Regole per validare l'architettura event-driven",
+      
+      "rules": [
+        {
+          "id": "EA-001",
+          "name": "Single Event Emitter",
+          "description": "Ogni tipo di evento deve avere un solo emettitore",
+          "severity": "HIGH",
+          "check": "Verificare che lo stesso evento non sia emesso da più di un dominio/servizio",
+          "error_type": "DUPLICATE_EVENT",
+          "question_template": "L'evento '{event_name}' sembra essere emesso sia da '{domain_1}' che da '{domain_2}'. Chi deve essere l'unico emettitore?"
+        },
+        {
+          "id": "EA-002",
+          "name": "Event Naming Convention",
+          "description": "Gli eventi devono seguire la convenzione <Aggregate><PastTenseVerb>",
+          "severity": "LOW",
+          "check": "Verificare che i nomi degli eventi siano in passato e usino il linguaggio del dominio",
+          "valid_pattern": "^[A-Z][a-zA-Z]+[A-Z][a-z]+(ed|en|t)$",
+          "invalid_patterns": [
+            "presente_indicativo",
+            "imperativo",
+            "nomi_tecnici_db",
+            "troppo_generico"
+          ],
+          "error_type": "NAMING_VIOLATION",
+          "question_template": "L'evento '{event_name}' non segue la convenzione di naming. Suggerimento: '{suggested_name}'"
+        },
+        {
+          "id": "EA-003",
+          "name": "Event Payload Completeness",
+          "description": "Gli eventi devono avere i campi obbligatori nel payload",
+          "severity": "MEDIUM",
+          "check": "Verificare la presenza di eventId, occurredAt, producer, schemaVersion, aggregateId",
+          "required_fields": [
+            "eventId",
+            "eventType",
+            "occurredAt",
+            "producer",
+            "schemaVersion",
+            "aggregateId"
+          ],
+          "optional_fields": [
+            "correlationId",
+            "causationId",
+            "payload"
+          ],
+          "error_type": "SEMANTIC_AMBIGUITY",
+          "question_template": "L'evento '{event_name}' manca dei campi obbligatori: {missing_fields}. Aggiungerli per garantire tracciabilità e idempotenza."
+        },
+        {
+          "id": "EA-004",
+          "name": "Event Consumer Compatibility",
+          "description": "Ogni evento emesso deve avere almeno un consumer definito o essere documentato come 'per audit'",
+          "severity": "LOW",
+          "check": "Verificare che gli eventi abbiano consumer o siano esplicitamente marcati come audit-only",
+          "error_type": "SEMANTIC_AMBIGUITY",
+          "question_template": "L'evento '{event_name}' non ha consumer definiti. È intenzionale (solo audit) o manca la definizione dei consumer?"
+        }
+      ]
+    },
+
+    "communication_patterns": {
+      "id": "CP",
+      "name": "Communication Pattern Validation",
+      "description": "Regole per validare la compatibilità dei pattern di comunicazione",
+      
+      "rules": [
+        {
+          "id": "CP-001",
+          "name": "Pattern Consistency Requirement",
+          "description": "I pattern di comunicazione devono essere compatibili con i requisiti di consistenza",
+          "severity": "HIGH",
+          "check": "Verificare che domini che richiedono consistenza forte non comunichino solo via eventi",
+          "incompatible_combinations": [
+            {
+              "requirement": "strong_consistency",
+              "pattern": "async_events_only",
+              "problem": "Eventi asincroni forniscono solo consistenza eventuale"
+            },
+            {
+              "requirement": "immediate_response",
+              "pattern": "pub_sub_only",
+              "problem": "Pub/Sub non garantisce risposta immediata"
+            }
+          ],
+          "error_type": "INCOMPATIBLE_PATTERN",
+          "question_template": "Il dominio '{domain_1}' richiede {requirement}, ma comunica con '{domain_2}' solo tramite {pattern}. È necessario aggiungere un canale sincrono?"
+        },
+        {
+          "id": "CP-002",
+          "name": "Bidirectional Communication Check",
+          "description": "Se due domini comunicano, verificare che entrambe le direzioni siano definite se necessarie",
+          "severity": "MEDIUM",
+          "check": "Verificare che le comunicazioni bidirezionali siano complete",
+          "error_type": "INCOMPATIBLE_PATTERN",
+          "question_template": "'{domain_1}' invia eventi a '{domain_2}', ma non c'è comunicazione inversa. '{domain_2}' ha bisogno di notificare '{domain_1}'?"
+        },
+        {
+          "id": "CP-003",
+          "name": "Pattern Documentation",
+          "description": "Ogni comunicazione deve specificare il pattern usato",
+          "severity": "LOW",
+          "check": "Verificare che ogni integrazione abbia un pattern esplicito (pub/sub, request/response, saga, etc.)",
+          "valid_patterns": [
+            "pub_sub",
+            "request_response",
+            "event_sourcing",
+            "cqrs",
+            "saga_orchestrated",
+            "saga_choreographed"
+          ],
+          "error_type": "SEMANTIC_AMBIGUITY",
+          "question_template": "La comunicazione tra '{domain_1}' e '{domain_2}' non specifica il pattern. È pub/sub, request/response, o altro?"
+        }
+      ]
+    }
+  },
+
+  "severity_levels": {
+    "HIGH": {
+      "description": "Problema critico che può causare errori di sistema, inconsistenze di dati, o violazioni di business logic",
+      "action": "Deve essere risolto prima di procedere all'Agente 3",
+      "requires_business_clarification": true
+    },
+    "MEDIUM": {
+      "description": "Problema significativo che può causare ambiguità o difficoltà di manutenzione",
+      "action": "Dovrebbe essere risolto o documentato come decisione consapevole",
+      "requires_business_clarification": "sometimes"
+    },
+    "LOW": {
+      "description": "Problema minore o violazione di best practice",
+      "action": "Consigliato risolvere, ma non bloccante",
+      "requires_business_clarification": false
+    }
+  },
+
+  "error_types": {
+    "ENTITY_OVERLAP": {
+      "code": "EO",
+      "name": "Entity Overlap",
+      "description": "La stessa entità appare in più domini senza differenziazione di ruolo",
+      "typical_severity": "HIGH"
+    },
+    "REQUIREMENT_CONFLICT": {
+      "code": "RC",
+      "name": "Requirement Conflict",
+      "description": "Due requisiti si contraddicono logicamente",
+      "typical_severity": "HIGH"
+    },
+    "SEMANTIC_AMBIGUITY": {
+      "code": "SA",
+      "name": "Semantic Ambiguity",
+      "description": "Un concetto non ha una definizione chiara o può essere interpretato in modi diversi",
+      "typical_severity": "MEDIUM"
+    },
+    "DUPLICATE_EVENT": {
+      "code": "DE",
+      "name": "Duplicate Event Emitter",
+      "description": "Lo stesso tipo di evento viene emesso da più di un dominio",
+      "typical_severity": "HIGH"
+    },
+    "INCOMPATIBLE_PATTERN": {
+      "code": "IP",
+      "name": "Incompatible Communication Pattern",
+      "description": "I pattern di comunicazione non sono compatibili con i requisiti",
+      "typical_severity": "MEDIUM-HIGH"
+    },
+    "NAMING_VIOLATION": {
+      "code": "NV",
+      "name": "Naming Convention Violation",
+      "description": "Un evento o entità non segue le convenzioni di naming",
+      "typical_severity": "LOW"
+    },
+    "MISCLASSIFIED_DOMAIN": {
+      "code": "MD",
+      "name": "Misclassified Domain",
+      "description": "Un dominio è classificato erroneamente come Core/Supporting/Generic",
+      "typical_severity": "MEDIUM"
+    }
+  },
+
+  "validation_workflow": {
+    "steps": [
+      {
+        "order": 1,
+        "name": "Domain Classification Check",
+        "rules": ["DC-001", "DC-002", "DC-003"],
+        "description": "Verifica che i domini siano classificati correttamente"
+      },
+      {
+        "order": 2,
+        "name": "Bounded Context Validation",
+        "rules": ["BC-001", "BC-002", "BC-003"],
+        "description": "Verifica che i Bounded Context siano ben definiti"
+      },
+      {
+        "order": 3,
+        "name": "Entity/VO Classification",
+        "rules": ["EVO-001", "EVO-002", "EVO-003"],
+        "description": "Verifica che Entity e Value Object siano classificati correttamente"
+      },
+      {
+        "order": 4,
+        "name": "Entity Ownership Check",
+        "rules": ["EO-001", "EO-002", "EO-003"],
+        "description": "Verifica che ogni Entity abbia un solo owner"
+      },
+      {
+        "order": 5,
+        "name": "Requirement Consistency Check",
+        "rules": ["RC-001", "RC-002", "RC-003"],
+        "description": "Verifica che i requisiti non si contraddicano"
+      },
+      {
+        "order": 6,
+        "name": "Event Architecture Validation",
+        "rules": ["EA-001", "EA-002", "EA-003", "EA-004"],
+        "description": "Verifica che l'architettura event-driven sia corretta"
+      },
+      {
+        "order": 7,
+        "name": "Communication Pattern Check",
+        "rules": ["CP-001", "CP-002", "CP-003"],
+        "description": "Verifica che i pattern di comunicazione siano compatibili"
+      }
+    ]
+  },
+
+  "output_templates": {
+    "problem": {
+      "problem_id": "string (format: P-{error_type_code}-{sequence})",
+      "rule_id": "string (reference to rule that detected the problem)",
+      "type": "string (error_type code)",
+      "severity": "string (HIGH|MEDIUM|LOW)",
+      "location": {
+        "domains_involved": ["array of domain names"],
+        "elements_involved": ["array of entity/event/requirement names"],
+        "specific_path": "string (JSON path to the problematic element)"
+      },
+      "description": "string (human-readable description)",
+      "evidence": "string (quoted content from input that shows the problem)",
+      "suggestion": "string (recommended fix)",
+      "requires_business_clarification": "boolean"
+    },
+    "question": {
+      "question_id": "string (format: Q-{sequence})",
+      "related_problems": ["array of problem_ids"],
+      "target": "string (business_stakeholder|technical_team|domain_expert)",
+      "question": "string (the actual question)",
+      "context": "string (why this question matters)",
+      "options": ["array of possible answers if applicable"],
+      "priority": "string (HIGH|MEDIUM|LOW)",
+      "expected_answer_type": "string (yes_no|choice|free_text|confirmation)"
+    },
+    "validation_result": {
+      "status": "string (VALID|NEEDS_REVIEW|INVALID)",
+      "summary": {
+        "total_problems": "integer",
+        "high_severity": "integer",
+        "medium_severity": "integer",
+        "low_severity": "integer"
+      },
+      "can_proceed_to_agent_3": "boolean",
+      "blocking_issues": ["array of problem_ids that block progression"]
+    }
+  }
+}

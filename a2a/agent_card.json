@@ -1,0 +1,284 @@
+{
+  "protocolVersion": "0.3",
+  "name": "Consistency & Conflict Analyzer",
+  "description": "Agent 2 of the Intelligent Domain Architect pipeline. Validates Domain-Driven Design models for semantic consistency, detects conflicts between bounded contexts, identifies ambiguities, and generates clarification questions for business stakeholders. Produces a validated and refined domain model ready for microservice specification generation.",
+  "version": "1.0.0",
+  "provider": {
+    "organization": "Intelligent Domain Architect Agents",
+    "url": "https://github.com/yourusername/intelligent-domain-architect"
+  },
+  "documentationUrl": "https://github.com/yourusername/agent-2-consistency-analyzer/blob/main/README.md",
+  "iconUrl": "https://example.com/icons/consistency-analyzer.png",
+  
+  "supportedInterfaces": [
+    {
+      "url": "http://localhost:8002/a2a",
+      "protocolBinding": "HTTP+JSON"
+    },
+    {
+      "url": "http://localhost:8002/jsonrpc",
+      "protocolBinding": "JSONRPC"
+    }
+  ],
+
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": true,
+    "stateTransitionHistory": true,
+    "extensions": [
+      {
+        "uri": "https://intelligent-domain-architect.io/extensions/ddd-validation/v1",
+        "description": "Domain-Driven Design validation rules and semantic analysis",
+        "required": false
+      },
+      {
+        "uri": "https://intelligent-domain-architect.io/extensions/llm-reasoning/v1",
+        "description": "LLM-based semantic reasoning using Ollama/Llama3",
+        "required": false
+      }
+    ]
+  },
+
+  "securitySchemes": {
+    "bearerAuth": {
+      "httpAuthSecurityScheme": {
+        "scheme": "Bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT Bearer token for authentication between agents"
+      }
+    },
+    "apiKey": {
+      "apiKeySecurityScheme": {
+        "location": "header",
+        "name": "X-API-Key",
+        "description": "API Key for simple authentication"
+      }
+    }
+  },
+
+  "security": [
+    {
+      "bearerAuth": []
+    },
+    {
+      "apiKey": []
+    }
+  ],
+
+  "defaultInputModes": [
+    "application/json",
+    "text/plain"
+  ],
+
+  "defaultOutputModes": [
+    "application/json",
+    "text/plain",
+    "text/markdown"
+  ],
+
+  "skills": [
+    {
+      "id": "domain-classification-validation",
+      "name": "Domain Classification Validation",
+      "description": "Validates that domains are correctly classified as Core, Supporting, or Generic based on DDD principles. Detects misclassified domains and suggests corrections.",
+      "tags": [
+        "ddd",
+        "domain-driven-design",
+        "core-domain",
+        "supporting-domain",
+        "generic-domain",
+        "classification",
+        "validation"
+      ],
+      "examples": [
+        "Validate that the Order Management domain is correctly classified as Core",
+        "Check if Authentication should be Generic instead of Supporting",
+        "Verify domain classifications against DDD criteria"
+      ],
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json", "text/markdown"]
+    },
+    {
+      "id": "entity-overlap-detection",
+      "name": "Entity Overlap Detection",
+      "description": "Detects entities that appear in multiple bounded contexts without proper role differentiation. Identifies violations of the single source of truth principle.",
+      "tags": [
+        "ddd",
+        "bounded-context",
+        "entity",
+        "overlap",
+        "source-of-truth",
+        "semantic-analysis"
+      ],
+      "examples": [
+        "Find entities duplicated across domains",
+        "Detect if Product entity exists in both Order and Inventory contexts",
+        "Identify entities without clear ownership"
+      ],
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json", "text/markdown"]
+    },
+    {
+      "id": "requirement-conflict-detection",
+      "name": "Requirement Conflict Detection",
+      "description": "Identifies contradicting requirements across domains. Detects logical conflicts, incompatible invariants, and temporal inconsistencies.",
+      "tags": [
+        "requirements",
+        "conflict",
+        "contradiction",
+        "invariants",
+        "business-rules",
+        "validation"
+      ],
+      "examples": [
+        "Find conflicting requirements between Order and Payment domains",
+        "Detect if immutability rules conflict with modification requirements",
+        "Identify incompatible SLA requirements"
+      ],
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json", "text/markdown"]
+    },
+    {
+      "id": "semantic-ambiguity-detection",
+      "name": "Semantic Ambiguity Detection",
+      "description": "Identifies unclear definitions, ambiguous terminology, and concepts that lack precise meaning within their bounded context.",
+      "tags": [
+        "semantics",
+        "ambiguity",
+        "ubiquitous-language",
+        "terminology",
+        "clarity",
+        "definitions"
+      ],
+      "examples": [
+        "Find terms with unclear definitions",
+        "Detect ambiguous entity names like 'Transaction'",
+        "Identify concepts that could be interpreted multiple ways"
+      ],
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json", "text/markdown"]
+    },
+    {
+      "id": "event-architecture-validation",
+      "name": "Event Architecture Validation",
+      "description": "Validates event-driven architecture patterns including single emitter rule, event naming conventions, and payload structure compliance.",
+      "tags": [
+        "eda",
+        "event-driven",
+        "events",
+        "pub-sub",
+        "naming-conventions",
+        "architecture"
+      ],
+      "examples": [
+        "Check if each event has only one emitter",
+        "Validate event naming follows PastTense convention",
+        "Verify event payload contains required fields"
+      ],
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json", "text/markdown"]
+    },
+    {
+      "id": "communication-pattern-validation",
+      "name": "Communication Pattern Validation",
+      "description": "Validates that communication patterns between domains are compatible with their consistency and latency requirements.",
+      "tags": [
+        "communication",
+        "patterns",
+        "sync",
+        "async",
+        "consistency",
+        "compatibility"
+      ],
+      "examples": [
+        "Check if sync/async patterns are compatible between domains",
+        "Validate that strong consistency requirements use appropriate patterns",
+        "Detect incompatible communication patterns"
+      ],
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json", "text/markdown"]
+    },
+    {
+      "id": "follow-up-question-generation",
+      "name": "Follow-up Question Generation",
+      "description": "Generates targeted clarification questions for business stakeholders based on detected issues and ambiguities.",
+      "tags": [
+        "questions",
+        "clarification",
+        "business",
+        "stakeholder",
+        "follow-up",
+        "requirements-gathering"
+      ],
+      "examples": [
+        "Generate questions to clarify entity ownership",
+        "Create questions about conflicting requirements",
+        "Produce questions to resolve ambiguous definitions"
+      ],
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json", "text/markdown"]
+    },
+    {
+      "id": "model-refinement",
+      "name": "Model Refinement",
+      "description": "Produces a validated and corrected version of the domain model with all detected issues resolved or documented.",
+      "tags": [
+        "refinement",
+        "correction",
+        "validation",
+        "output",
+        "domain-model",
+        "improvement"
+      ],
+      "examples": [
+        "Refine domain model based on validation results",
+        "Apply suggested corrections to the model",
+        "Produce clean model ready for Agent 3"
+      ],
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json"]
+    },
+    {
+      "id": "full-analysis",
+      "name": "Full Consistency Analysis",
+      "description": "Performs complete consistency and conflict analysis on a domain model, combining all validation skills into a comprehensive report.",
+      "tags": [
+        "full-analysis",
+        "comprehensive",
+        "validation",
+        "report",
+        "all-checks",
+        "complete"
+      ],
+      "examples": [
+        "Analyze this domain model for all consistency issues",
+        "Perform complete DDD validation",
+        "Run full consistency check on the model"
+      ],
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json", "text/markdown"]
+    }
+  ],
+
+  "supportsExtendedAgentCard": false,
+
+  "metadata": {
+    "pipeline": {
+      "name": "Intelligent Domain Architect Agents",
+      "position": 2,
+      "totalAgents": 3,
+      "upstreamAgent": "agent-1-domain-interviewer",
+      "downstreamAgent": "agent-3-specification-generator"
+    },
+    "llm": {
+      "provider": "ollama",
+      "model": "llama3",
+      "endpoint": "http://localhost:11434"
+    },
+    "analysis": {
+      "usesEmbeddings": true,
+      "embeddingModel": "sentence-transformers/all-MiniLM-L6-v2",
+      "validationRulesVersion": "1.0.0"
+    }
+  }
+}

@@ -1,0 +1,92 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment Variables
+.env
+.env.local
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Docker
+*.dockerfile.swp
+docker-compose.override.yml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Data
+data/
+*.csv
+*.db
+*.sqlite
+
+# Model files
+models/*.bin
+models/*.pt
+*.onnx
+
+# Output Agent (analisi generate)
+output_agent/
+!output_agent/.gitkeep
+
+# Temporary test files
+test_result.json
+temp_request.json
+*_backup.tar.gz
+
+# Claude Code
+.claude/
+
+# Docker volumes (se montati localmente)
+kafka_data/
+zookeeper_data/
+agent2_output/
+agent2_logs/
+n8n_data/

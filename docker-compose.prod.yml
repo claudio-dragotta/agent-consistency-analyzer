@@ -1,0 +1,223 @@
+version: '3.8'
+
+# Production-ready Docker Compose for Agent 2
+# Optimized for performance, security, and scalability
+
+x-common-env: &common-env
+  # Ollama Configuration
+  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+  OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3}
+  OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-120}
+
+  # Kafka Configuration
+  KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+  KAFKA_INPUT_TOPIC: ${KAFKA_INPUT_TOPIC:-agent1-output}
+  KAFKA_OUTPUT_TOPIC: ${KAFKA_OUTPUT_TOPIC:-agent2-output}
+  KAFKA_GROUP_ID: ${KAFKA_GROUP_ID:-agent2-consistency-analyzer}
+  KAFKA_AUTO_OFFSET_RESET: ${KAFKA_AUTO_OFFSET_RESET:-earliest}
+
+  # Application Configuration
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  API_HOST: 0.0.0.0
+  API_PORT: 8002
+
+  # Analysis Settings
+  EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-all-MiniLM-L6-v2}
+  ENTITY_OVERLAP_THRESHOLD: ${ENTITY_OVERLAP_THRESHOLD:-0.85}
+  SEMANTIC_SIMILARITY_THRESHOLD: ${SEMANTIC_SIMILARITY_THRESHOLD:-0.75}
+  MAX_FOLLOW_UP_QUESTIONS: ${MAX_FOLLOW_UP_QUESTIONS:-5}
+
+services:
+  # Zookeeper - Required by Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: agent2-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_SYNC_LIMIT: 2
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    networks:
+      - agent2-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Kafka Broker
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: agent2-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "${KAFKA_EXTERNAL_PORT:-9092}:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_NUM_PARTITIONS: 4
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - agent2-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # Agent 2 - REST API Mode
+  agent2-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: agent2-consistency-analyzer:latest
+    container_name: agent2-api
+    ports:
+      - "${API_PORT:-8002}:8002"
+    environment:
+      <<: *common-env
+    volumes:
+      - ./knowledge_base:/app/knowledge_base:ro
+      - ./input_agent:/app/input_agent:ro
+      - agent2_output:/app/output_agent
+      - agent2_logs:/app/logs
+    networks:
+      - agent2-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+  # Agent 2 - Kafka Consumer Mode (Parallel Processing)
+  agent2-consumer:
+    image: agent2-consistency-analyzer:latest
+    container_name: agent2-consumer
+    command: ["python", "-m", "app.kafka.consumer_advanced"]
+    environment:
+      <<: *common-env
+      MAX_WORKERS: ${MAX_WORKERS:-4}
+    volumes:
+      - ./knowledge_base:/app/knowledge_base:ro
+      - agent2_output:/app/output_agent
+      - agent2_logs:/app/logs
+    networks:
+      - agent2-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      agent2-api:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '2.0'
+          memory: 2G
+      replicas: ${CONSUMER_REPLICAS:-1}
+
+  # N8N - Workflow Orchestration (Optional)
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: agent2-n8n
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      - N8N_HOST=${N8N_HOST:-localhost}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Europe/Rome
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n:/backup:ro
+    networks:
+      - agent2-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - full  # Only starts with --profile full
+
+  # Kafka UI - Monitoring (Optional)
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: agent2-kafka-ui
+    ports:
+      - "${KAFKA_UI_PORT:-8080}:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: agent2-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      DYNAMIC_CONFIG_ENABLED: 'true'
+    depends_on:
+      - kafka
+    networks:
+      - agent2-network
+    restart: unless-stopped
+    profiles:
+      - full  # Only starts with --profile full
+
+networks:
+  agent2-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  zookeeper_data:
+    driver: local
+  zookeeper_logs:
+    driver: local
+  kafka_data:
+    driver: local
+  agent2_output:
+    driver: local
+  agent2_logs:
+    driver: local
+  n8n_data:
+    driver: local
