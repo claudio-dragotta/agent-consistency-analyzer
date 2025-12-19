@@ -13,7 +13,7 @@ if /i not "%CONFIRM%"=="s" (
 
 echo.
 echo Stopping containers...
-docker-compose -f docker-compose.prod.yml down
+docker-compose down
 
 echo.
 echo ========================================
@@ -25,7 +25,7 @@ set /p CLEANUP="Rimuovere anche i volumi (dati)? (s/N): "
 if /i "%CLEANUP%"=="s" (
  echo.
  echo Rimozione volumi...
- docker-compose -f docker-compose.prod.yml down -v
+ docker-compose down -v
  echo OK Volumi rimossi
 )
 

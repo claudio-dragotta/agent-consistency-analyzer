@@ -1,0 +1,354 @@
+{
+  "name": "Agent 2 - Demo Completa",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "1. INPUT - Modello da Validare",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "manual"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "domain_model",
+              "value": "={\"metadata\": {\"modelId\": \"demo-001\", \"version\": \"1.0\", \"createdAt\": \"2025-12-17T10:00:00Z\"}, \"domainMap\": {\"coreDomains\": [{\"name\": \"Order Management\", \"classification\": \"CORE\", \"valueProposition\": \"Gestione ordini clienti\", \"boundedContexts\": [{\"name\": \"OrderContext\", \"ubiquitousLanguage\": {\"Order\": \"Richiesta di acquisto\", \"Product\": \"Articolo ordinato\"}, \"entities\": [{\"name\": \"Order\", \"type\": \"ENTITY\", \"description\": \"Ordine cliente\"}, {\"name\": \"Product\", \"type\": \"ENTITY\", \"description\": \"Prodotto ordinato\"}], \"valueObjects\": [], \"aggregates\": [{\"name\": \"OrderAggregate\", \"root\": \"Order\", \"entities\": [\"Order\", \"Product\"]}]}], \"functionalRequirements\": [{\"id\": \"FR-ORD-001\", \"description\": \"Gli ordini devono essere immutabili dopo conferma\", \"priority\": \"HIGH\"}, {\"id\": \"FR-ORD-002\", \"description\": \"Gli utenti possono modificare ordini entro 24 ore\", \"priority\": \"HIGH\"}]}, {\"name\": \"Product Catalog\", \"classification\": \"CORE\", \"valueProposition\": \"Catalogo prodotti\", \"boundedContexts\": [{\"name\": \"CatalogContext\", \"ubiquitousLanguage\": {\"Product\": \"Prodotto in catalogo\", \"Category\": \"Categoria prodotto\"}, \"entities\": [{\"name\": \"Product\", \"type\": \"ENTITY\", \"description\": \"Prodotto del catalogo\"}, {\"name\": \"Category\", \"type\": \"ENTITY\", \"description\": \"Categoria\"}], \"valueObjects\": [], \"aggregates\": [{\"name\": \"ProductAggregate\", \"root\": \"Product\", \"entities\": [\"Product\", \"Category\"]}]}], \"functionalRequirements\": [{\"id\": \"FR-CAT-001\", \"description\": \"I prodotti devono avere una categoria\", \"priority\": \"MEDIUM\"}]}]}, \"eventDrivenModel\": {\"events\": [{\"name\": \"OrderCreated\", \"description\": \"Ordine creato\", \"emitters\": [\"OrderService\", \"PaymentService\"], \"subscribers\": [\"InventoryService\", \"ShippingService\"], \"payload\": {\"orderId\": \"string\", \"customerId\": \"string\", \"items\": \"array\"}}, {\"name\": \"ProductAdded\", \"description\": \"Prodotto aggiunto al catalogo\", \"emitters\": [\"CatalogService\"], \"subscribers\": [\"SearchService\"], \"payload\": {\"productId\": \"string\", \"name\": \"string\"}}], \"communicationPatterns\": [{\"sourceContext\": \"OrderContext\", \"targetContext\": \"InventoryContext\", \"pattern\": \"EVENT_DRIVEN\", \"description\": \"Ordini notificano inventory\"}, {\"sourceContext\": \"OrderContext\", \"targetContext\": \"PaymentContext\", \"pattern\": \"SYNCHRONOUS_API\", \"description\": \"Verifica pagamento sincrona\"}]}}"
+            }
+          ],
+          "boolean": [
+            {
+              "name": "use_llm",
+              "value": true
+            },
+            {
+              "name": "apply_auto_fixes",
+              "value": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-input",
+      "name": "Prepara Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [460, 300],
+      "notes": "Questo nodo contiene il modello funzionale da validare.\n\nProblemi intenzionali:\n1. Entity 'Product' duplicata in OrderContext e CatalogContext\n2. Requisiti contraddittori (FR-ORD-001 vs FR-ORD-002)\n3. Evento 'OrderCreated' ha 2 emitters (OrderService, PaymentService)"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8002/analyze",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "domain_model",
+              "value": "={{ $json.domain_model }}"
+            },
+            {
+              "name": "use_llm",
+              "value": "={{ $json.use_llm }}"
+            },
+            {
+              "name": "apply_auto_fixes",
+              "value": "={{ $json.apply_auto_fixes }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "agent2-analyze",
+      "name": "2. AGENT 2 - Analizza Modello",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 300],
+      "notes": "Agent 2 esegue:\n1. Semantic Analysis (sovrapposizioni entità)\n2. Conflict Detection (contraddizioni)\n3. Event Architecture Validation\n4. Genera domande di follow-up\n5. Raffina il modello"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "operation": "equals",
+              "value2": "ISSUES_FOUND"
+            }
+          ]
+        }
+      },
+      "id": "check-issues",
+      "name": "Problemi Trovati?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [940, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "validation_status",
+              "value": "={{ $json.status }}"
+            },
+            {
+              "name": "total_issues",
+              "value": "={{ $json.summary.total_issues }}"
+            },
+            {
+              "name": "entity_overlaps",
+              "value": "={{ $json.summary.entity_overlaps }}"
+            },
+            {
+              "name": "requirement_conflicts",
+              "value": "={{ $json.summary.requirement_conflicts }}"
+            },
+            {
+              "name": "event_violations",
+              "value": "={{ $json.summary.event_architecture_violations || 0 }}"
+            }
+          ],
+          "number": [
+            {
+              "name": "questions_count",
+              "value": "={{ $json.follow_up_questions.length }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "extract-summary",
+      "name": "3a. OUTPUT - Summary Report",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [1180, 180],
+      "notes": "REPORT DI VALIDAZIONE:\n- Numero totale problemi\n- Suddivisione per categoria\n- Numero di domande generate"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "questions",
+              "value": "={{ JSON.stringify($json.follow_up_questions, null, 2) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "extract-questions",
+      "name": "3b. OUTPUT - Domande Follow-up",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [1180, 300],
+      "notes": "DOMANDE DI FOLLOW-UP:\n- Domande mirate per risolvere problemi complessi\n- Risposte suggerite\n- Priorità per severity"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "refined_model",
+              "value": "={{ JSON.stringify($json.refined_model, null, 2) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "extract-refined",
+      "name": "3c. OUTPUT - Modello Raffinato",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [1180, 420],
+      "notes": "MODELLO RAFFINATO:\n- Versione corretta del modello\n- Correzioni automatiche applicate\n- Pronto per Agent 3"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "validation_status",
+              "value": "VALID"
+            },
+            {
+              "name": "message",
+              "value": "Modello valido, nessun problema trovato!"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "valid-result",
+      "name": "3d. OUTPUT - Modello Valido",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [1180, 540],
+      "notes": "MODELLO VALIDO:\nNessun problema trovato"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll"
+      },
+      "id": "merge-outputs",
+      "name": "Combina Risultati",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Formatta i risultati per visualizzazione chiara\nconst items = $input.all();\n\n// Estrai dati da tutti i branch\nconst summary = items.find(i => i.json.validation_status);\nconst questions = items.find(i => i.json.questions);\nconst refined = items.find(i => i.json.refined_model);\n\nlet result = {\n  // === REPORT DI VALIDAZIONE ===\n  validation_report: {\n    status: summary?.json.validation_status || 'UNKNOWN',\n    total_issues: summary?.json.total_issues || 0,\n    breakdown: {\n      entity_overlaps: summary?.json.entity_overlaps || 0,\n      requirement_conflicts: summary?.json.requirement_conflicts || 0,\n      event_violations: summary?.json.event_violations || 0\n    }\n  },\n  \n  // === DOMANDE DI FOLLOW-UP ===\n  follow_up_questions: {\n    count: summary?.json.questions_count || 0,\n    questions: questions?.json.questions ? JSON.parse(questions.json.questions) : []\n  },\n  \n  // === MODELLO RAFFINATO ===\n  refined_model_available: refined?.json.refined_model ? true : false,\n  refined_model: refined?.json.refined_model ? JSON.parse(refined.json.refined_model) : null,\n  \n  // === TIMESTAMP ===\n  analyzed_at: new Date().toISOString()\n};\n\nreturn [{ json: result }];"
+      },
+      "id": "format-output",
+      "name": "4. RISULTATI FINALI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1660, 300],
+      "notes": "RISULTATI FORMATTATI:\n1. Report di validazione e suggerimenti\n2. Domande di follow-up\n3. Modello raffinato e coerente"
+    }
+  ],
+  "connections": {
+    "manual-trigger": {
+      "main": [
+        [
+          {
+            "node": "set-input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set-input": {
+      "main": [
+        [
+          {
+            "node": "agent2-analyze",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "agent2-analyze": {
+      "main": [
+        [
+          {
+            "node": "check-issues",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-issues": {
+      "main": [
+        [
+          {
+            "node": "extract-summary",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "extract-questions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "extract-refined",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "valid-result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "extract-summary": {
+      "main": [
+        [
+          {
+            "node": "merge-outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "extract-questions": {
+      "main": [
+        [
+          {
+            "node": "merge-outputs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "extract-refined": {
+      "main": [
+        [
+          {
+            "node": "merge-outputs",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "valid-result": {
+      "main": [
+        [
+          {
+            "node": "merge-outputs",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "merge-outputs": {
+      "main": [
+        [
+          {
+            "node": "format-output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2025-12-17T10:00:00.000Z",
+  "versionId": "1"
+}

@@ -114,7 +114,7 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       - N8N_HOST=localhost
-      - WEBHOOK_URL=http://localhost:5678/
+      - WEBHOOK_URL=http://127.0.0.1:5678/
 ```
 
 Poi usa `http://host.docker.internal:8002` come URL.

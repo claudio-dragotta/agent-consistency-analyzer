@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Production-ready Docker Compose for Agent 2
 # Optimized for performance, security, and scalability
 
@@ -154,7 +152,7 @@ services:
           memory: 2G
       replicas: ${CONSUMER_REPLICAS:-1}
 
-  # N8N - Workflow Orchestration (Optional)
+  # N8N - Workflow Orchestration
   n8n:
     image: n8nio/n8n:latest
     container_name: agent2-n8n
@@ -164,7 +162,7 @@ services:
       - N8N_HOST=${N8N_HOST:-localhost}
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
-      - WEBHOOK_URL=http://localhost:5678/
+      - WEBHOOK_URL=http://127.0.0.1:5678/
       - GENERIC_TIMEZONE=Europe/Rome
     volumes:
       - n8n_data:/home/node/.n8n
@@ -179,10 +177,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    profiles:
-      - full  # Only starts with --profile full
 
-  # Kafka UI - Monitoring (Optional)
+  # Kafka UI - Monitoring
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: agent2-kafka-ui
@@ -198,8 +194,6 @@ services:
     networks:
       - agent2-network
     restart: unless-stopped
-    profiles:
-      - full  # Only starts with --profile full
 
 networks:
   agent2-network:

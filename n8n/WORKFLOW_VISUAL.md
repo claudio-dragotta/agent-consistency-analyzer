@@ -165,8 +165,8 @@ Input → Webhook → HTTP Request → Condition Check
 
 ### Metodo 2: Via cURL
 ```bash
-# Ottieni webhook URL da N8N (es: http://localhost:5678/webhook/abc123)
-curl -X POST http://localhost:5678/webhook/YOUR-WEBHOOK-ID \
+# Ottieni webhook URL da N8N (es: http://127.0.0.1:5678/webhook/abc123)
+curl -X POST http://127.0.0.1:5678/webhook/YOUR-WEBHOOK-ID \
   -H "Content-Type: application/json" \
   -d @input_agent/example_bad.json
 ```
