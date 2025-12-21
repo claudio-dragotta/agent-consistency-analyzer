@@ -89,8 +89,6 @@ Poi apri manualmente:
    - Rispondi alle domande generate
    - Il loop continua automaticamente fino a modello valido
 
-   **Guida completa:** [n8n/README_INTERACTIVE_LOOP.md](n8n/README_INTERACTIVE_LOOP.md)
-
 ---
 
 ## Cosa Fa Agent 2
@@ -239,10 +237,7 @@ agent-consistency-analyzer/
 │
 ├── n8n/
 │   ├── workflow_complete_loop.json   ← Loop interattivo (PRODUZIONE)
-│   ├── workflow_demo_simple.json     ← Test rapidi
-│   ├── README_INTERACTIVE_LOOP.md    ← Guida completa loop interattivo
-│   ├── DEMO_SETUP.md                 ← Setup iniziale demo
-│   └── WORKFLOW_VISUAL.md            ← Diagrammi workflow
+│   └── workflow_demo_simple.json     ← Test rapidi
 │
 ├── knowledge_base/
 │   ├── ddd_rules.md                  ← 23 regole DDD
@@ -423,12 +418,305 @@ Agent 2 controlla automaticamente:
 
 ---
 
+## Come Funziona il Flusso di Processing
+
+### Pipeline Completa: Da Agent 1 ad Agent 3
+
+Agent 2 è il secondo step di una pipeline a 3 agenti. Ecco come i dati fluiscono:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ AGENT 1: Domain Modeler                                        │
+│ ─────────────────────────                                      │
+│ INPUT:  Intervista stakeholder                                 │
+│ OUTPUT: domain_model.json (modello funzionale DDD)             │
+└─────────────────────────────────────────────────────────────────┘
+                           │
+                           │ Kafka Topic: domain-model-created
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ AGENT 2: Consistency Analyzer (QUESTO REPO)                    │
+│ ──────────────────────────────────────                         │
+│ INPUT:  domain_model.json da Agent 1                           │
+│                                                                 │
+│ PROCESSING:                                                     │
+│ 1. Validazione 23 regole DDD                                   │
+│ 2. Semantic analysis (entity overlap detection)                │
+│ 3. Conflict detection (requirement contradictions)             │
+│ 4. Event architecture validation                               │
+│ 5. Auto-fix problemi semplici                                  │
+│ 6. Generazione domande follow-up per problemi complessi        │
+│ 7. Loop interattivo con utente (se necessario)                 │
+│                                                                 │
+│ OUTPUT:                                                         │
+│ - validation_report.json (status, issues, severity)            │
+│ - refined_model.json (modello corretto + metadata)             │
+│ - follow_up_answers.json (risposte utente tracciate)           │
+└─────────────────────────────────────────────────────────────────┘
+                           │
+                           │ Kafka Topic: domain-model-validated
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ AGENT 3: Functional Spec Generator                             │
+│ ───────────────────────────────────                            │
+│ INPUT:  refined_model.json da Agent 2                          │
+│ OUTPUT: specifiche_funzionali.pdf (documentazione completa)    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Dettaglio Processing di Agent 2
+
+Quando Agent 2 riceve un modello da Agent 1, esegue questi passaggi:
+
+#### Step 1: Ricezione Input
+
+```json
+POST /analyze
+{
+  "domain_model": {...},           // Modello da Agent 1
+  "use_llm": true,                 // Usa Llama3 per analisi profonda
+  "apply_auto_fixes": true,        // Correggi automaticamente errori semplici
+  "previous_answers": {}           // Vuoto alla prima iterazione
+}
+```
+
+#### Step 2: Validazione Strutturale (Rule-Based)
+
+- Controlla presenza di Core Domain
+- Verifica Bounded Context definiti
+- Valida Aggregate Root
+- Controlla Entity con ID univoci
+- Valida Value Objects immutabili
+- **Output:** Lista di `structural_issues`
+
+#### Step 3: Semantic Analysis (Embeddings)
+
+- Calcola embeddings per tutte le Entity
+- Confronta similarità semantica tra Entity in diversi Bounded Context
+- Se similarità > 0.85 → possibile duplicato
+- **Output:** Lista di `semantic_issues` (entity overlaps)
+
+#### Step 4: Conflict Detection (LLM)
+
+- Analizza Functional Requirements
+- Cerca contraddizioni logiche (es. "immutabile" vs "modificabile")
+- Usa Llama3 per reasoning semantico
+- **Output:** Lista di `conflict_issues`
+
+#### Step 5: Event Architecture Validation
+
+- Verifica naming eventi (passato: OrderCreated, non CreateOrder)
+- Controlla Single Emitter Rule (1 evento = 1 emittente)
+- Valida subscribers definiti
+- **Output:** Lista di `event_issues`
+
+#### Step 6: Auto-Fixing
+
+Se `apply_auto_fixes=true`:
+
+- Rinomina eventi con naming errato
+- Aggiunge metadata mancanti
+- Corregge classificazioni domain evidenti
+- **Output:** `refined_model` con correzioni applicate
+
+#### Step 7: Question Generation
+
+Per problemi complessi (non auto-fixable):
+
+- Genera domanda specifica per ogni problema
+- Propone 2-3 risposte suggerite
+- Categorizza per tipo (entity_overlap, requirement_conflict, etc.)
+- **Output:** Lista di `follow_up_questions`
+
+#### Step 8: Iterative Refinement Loop (NOVITÀ v1.2.0)
+
+**Se ci sono follow-up questions:**
+
+```
+Iterazione 0:
+├─ Input: domain_model originale + previous_answers={}
+├─ Processing: Trova 3 problemi
+├─ Output: 3 domande
+└─ User: Risponde via form HTML
+
+Iterazione 1:
+├─ Input: domain_model originale + previous_answers={q0: "...", q1: "...", q2: "..."}
+├─ Processing:
+│  ├─ Applica risposte utente al modello
+│  ├─ Registra decisioni in _userGuidedFixes
+│  ├─ Ri-analizza il modello aggiornato
+│  └─ Trova 1 problema (migliorato!)
+├─ Output: 1 domanda
+└─ User: Risponde
+
+Iterazione 2:
+├─ Input: domain_model + previous_answers={q0: "..."}
+├─ Processing:
+│  ├─ Applica risposta utente
+│  ├─ Ri-analizza
+│  └─ Nessun problema trovato
+├─ Output: STATUS=VALID
+└─ Fine loop
+```
+
+**Come le risposte vengono applicate:**
+
+Quando l'utente risponde (es. "Order appartiene solo a OrderManagement"):
+
+1. `ModelRefiner._apply_user_answers()` riceve le risposte
+2. Routing alla funzione handler appropriata in base alla categoria:
+   - `entity_overlap` → `_handle_entity_overlap_answer()`
+   - `requirement_conflict` → `_handle_requirement_conflict_answer()`
+   - `duplicate_event` → `_handle_duplicate_event_answer()`
+   - `naming_violation` → `_handle_naming_answer()`
+   - `domain_classification` → `_handle_domain_classification_answer()`
+3. L'handler:
+   - Interpreta la risposta (NLP semplice con keyword matching)
+   - Applica modifiche al modello (es. rimuove entità duplicata)
+   - Registra decisione in `refined_model._userGuidedFixes`:
+
+     ```json
+     {
+       "type": "ENTITY_OVERLAP_RESOLVED",
+       "question": "L'entità Order esiste in OrderManagement e Shipping...",
+       "resolution": "Order appartiene solo a OrderManagement",
+       "timestamp": "2025-12-19T10:30:00.000Z"
+     }
+     ```
+
+   - Restituisce `Refinement(applied=True)`
+4. Il modello raffinato viene ri-analizzato nell'iterazione successiva
+5. Se nuovi problemi → nuove domande, altrimenti → VALID
+
+**Tracciabilità:**
+
+Il modello finale contiene tutte le decisioni utente:
+```json
+{
+  "metadata": {
+    "refinedAt": "2025-12-19T10:30:00.000Z",
+    "refinedBy": "agent-2-consistency-analyzer",
+    "validationVersion": "1.2.0"
+  },
+  "_userGuidedFixes": [
+    {"type": "ENTITY_OVERLAP_RESOLVED", "resolution": "..."},
+    {"type": "REQUIREMENT_CONFLICT_RESOLVED", "resolution": "..."},
+    {"type": "DUPLICATE_EVENT_RESOLVED", "resolution": "..."}
+  ],
+  "_validationAnnotations": [
+    // Problemi non risolti automaticamente
+  ]
+}
+```
+
+Questo è fondamentale per **Agent 3**, che può usare `_userGuidedFixes` per generare specifiche funzionali più accurate, sapendo esattamente quali decisioni di design sono state prese.
+
+#### Step 9: Output Finale
+
+```json
+{
+  "status": "VALID" | "ISSUES_FOUND" | "CRITICAL_ISSUES",
+  "summary": {
+    "total_issues": 0,
+    "entity_overlaps": 0,
+    "requirement_conflicts": 0,
+    "naming_violations": 0
+  },
+  "validation_report": {
+    "semantic_issues": [],
+    "conflict_issues": [],
+    "event_issues": []
+  },
+  "follow_up_questions": [],
+  "refined_model": { ... },  // Con _userGuidedFixes e metadata
+  "refinement_report": {
+    "auto_fixed": 3,
+    "requires_manual": 0,
+    "refinements": [...]
+  }
+}
+```
+
+### Kafka Integration
+
+Agent 2 può funzionare in 2 modalità:
+
+#### Modalità 1: API Diretta (Demo)
+
+- POST /analyze
+- Risposta sincrona
+- Usato nei workflow n8n
+
+#### Modalità 2: Kafka Consumer/Producer (Produzione)
+
+- Consumer: Ascolta topic `domain-model-created`
+- Processing: Analizza modello
+- Producer: Pubblica su topic `domain-model-validated`
+- Integrazione seamless con Agent 1 e Agent 3
+
+---
+
+## Novità v1.2.0: Raffinamento Iterativo Reale
+
+### Problema Risolto
+
+Nelle versioni precedenti, il workflow n8n inviava le `previous_answers` all'API, ma l'API **non le riceveva né le processava**. Questo causava un loop che **non migliorava progressivamente** il modello:
+
+```text
+❌ PRIMA (v1.1.0):
+Iter 0: 3 problemi → 3 domande
+User risponde
+Iter 1: 3 problemi (STESSI!) → Loop infinito
+```
+
+### Fix Implementato
+
+**Modifiche a `app/main.py`:**
+
+- Aggiunto campo `previous_answers: Dict[str, str]` a `DomainModelRequest`
+- Passato `previous_answers` attraverso tutta la pipeline di processing
+- Logging per tracciare raffinamento iterativo
+
+**Modifiche a `app/services/model_refiner.py`:**
+
+- Aggiunto parametro `previous_answers` a `refine_model()`
+- Implementato metodo `_apply_user_answers()` che processa le risposte
+- Implementati 5 handler specializzati per categoria:
+  - `_handle_entity_overlap_answer()`
+  - `_handle_requirement_conflict_answer()`
+  - `_handle_duplicate_event_answer()`
+  - `_handle_naming_answer()`
+  - `_handle_domain_classification_answer()`
+- Ogni handler interpreta la risposta e applica modifiche al modello
+- Tutte le decisioni vengono registrate in `_userGuidedFixes`
+
+### Risultato
+
+```text
+✓ DOPO (v1.2.0):
+Iter 0: 3 problemi → 3 domande
+User risponde
+Iter 1: 1 problema (migliorato!) → 1 domanda
+User risponde
+Iter 2: 0 problemi → VALID ✓
+```
+
+**Benefici:**
+
+- Il modello migliora progressivamente ad ogni iterazione
+- Tracciabilità completa delle decisioni utente
+- Agent 3 può usare `_userGuidedFixes` per specifiche più accurate
+- Backward compatible (previous_answers opzionale)
+
+---
+
 ## Info Progetto
 
-- **Versione:** 1.0.0
+- **Versione:** 1.2.0
 - **Status:** Production Ready
-- **Ultimo Aggiornamento:** 2025-12-17
+- **Ultimo Aggiornamento:** 2025-12-19
 - **Licenza:** MIT
+- **Changelog:** [CHANGELOG.md](CHANGELOG.md)
 
 ---
 

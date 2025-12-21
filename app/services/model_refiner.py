@@ -421,17 +421,17 @@ class ModelRefiner:
     ) -> Optional[Refinement]:
         """
         Annotate incompatible pattern for manual resolution.
-        
+
         Args:
             model: The domain model (modified in place)
             issue: The incompatible pattern issue
-            
+
         Returns:
             Refinement record
         """
         if "_validationAnnotations" not in model:
             model["_validationAnnotations"] = []
-        
+
         annotation = {
             "type": "INCOMPATIBLE_PATTERN",
             "affectedElements": issue.affected_elements,
@@ -440,9 +440,9 @@ class ModelRefiner:
             "recommendation": issue.recommendation,
             "requiresManualResolution": True
         }
-        
+
         model["_validationAnnotations"].append(annotation)
-        
+
         return Refinement(
             refinement_id=self._get_next_refinement_id(),
             refinement_type="suggested",
@@ -453,43 +453,326 @@ class ModelRefiner:
             original_value=None,
             new_value=annotation
         )
-    
+
+    def _apply_user_answers(
+        self,
+        model: Dict[str, Any],
+        questions: List[FollowUpQuestion],
+        answers: Dict[str, str]
+    ) -> List[Refinement]:
+        """
+        Apply user answers to refine the model iteratively.
+
+        This method interprets user answers and applies targeted fixes to the model.
+
+        Args:
+            model: The domain model (modified in place)
+            questions: The questions that were asked
+            answers: User answers mapped by question ID (q0, q1, etc.)
+
+        Returns:
+            List of refinements applied based on user answers
+        """
+        refinements = []
+
+        for question_id, answer in answers.items():
+            # Extract question index (q0 -> 0, q1 -> 1)
+            try:
+                question_index = int(question_id[1:])
+            except (ValueError, IndexError):
+                logger.warning(f"Invalid question ID format: {question_id}")
+                continue
+
+            if question_index >= len(questions):
+                logger.warning(f"Question index {question_index} out of range")
+                continue
+
+            question = questions[question_index]
+
+            # Apply refinement based on question category and answer
+            ref = self._apply_single_answer(model, question, answer)
+            if ref:
+                refinements.append(ref)
+                logger.info(f"Applied user answer for {question.category}: {ref.description}")
+
+        return refinements
+
+    def _apply_single_answer(
+        self,
+        model: Dict[str, Any],
+        question: FollowUpQuestion,
+        answer: str
+    ) -> Optional[Refinement]:
+        """
+        Apply a single user answer to refine the model.
+
+        Args:
+            model: The domain model (modified in place)
+            question: The question that was asked
+            answer: The user's answer
+
+        Returns:
+            Refinement record if a change was applied
+        """
+        category = question.category.lower()
+        answer_lower = answer.lower()
+
+        # Handle Entity Overlap
+        if "entity" in category and "overlap" in category:
+            return self._handle_entity_overlap_answer(model, question, answer)
+
+        # Handle Requirement Conflict
+        elif "requirement" in category and "conflict" in category:
+            return self._handle_requirement_conflict_answer(model, question, answer)
+
+        # Handle Duplicate Event
+        elif "event" in category or "duplicate" in category:
+            return self._handle_duplicate_event_answer(model, question, answer)
+
+        # Handle Naming Violation
+        elif "naming" in category:
+            return self._handle_naming_answer(model, question, answer)
+
+        # Handle Domain Classification
+        elif "domain" in category or "classification" in category:
+            return self._handle_domain_classification_answer(model, question, answer)
+
+        # Generic handler for other categories
+        else:
+            logger.info(f"No specific handler for category '{question.category}', recording answer")
+            # Record answer in metadata for manual review
+            if "_userAnswers" not in model:
+                model["_userAnswers"] = []
+            model["_userAnswers"].append({
+                "question": question.question,
+                "answer": answer,
+                "category": question.category
+            })
+            return None
+
+    def _handle_entity_overlap_answer(
+        self,
+        model: Dict[str, Any],
+        question: FollowUpQuestion,
+        answer: str
+    ) -> Optional[Refinement]:
+        """Handle user answer for entity overlap issues."""
+        # Example: "Order belongs only to OrderManagement"
+        # Extract entity name and context from question
+        logger.info(f"Handling entity overlap: {answer[:100]}")
+
+        # Simple heuristic: if answer mentions "only" or "belongs to",
+        # user is choosing single ownership
+        if "only" in answer.lower() or "belongs to" in answer.lower():
+            # Record decision
+            if "_userGuidedFixes" not in model:
+                model["_userGuidedFixes"] = []
+
+            model["_userGuidedFixes"].append({
+                "type": "ENTITY_OVERLAP_RESOLVED",
+                "question": question.question[:100],
+                "resolution": answer,
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            })
+
+            return Refinement(
+                refinement_id=self._get_next_refinement_id(),
+                refinement_type="manual",
+                description=f"Entity overlap resolved based on user input: {answer[:80]}",
+                applied=True,
+                source_issue_type="ENTITY_OVERLAP",
+                affected_path="_userGuidedFixes",
+                original_value="ambiguous ownership",
+                new_value=answer[:100]
+            )
+
+        return None
+
+    def _handle_requirement_conflict_answer(
+        self,
+        model: Dict[str, Any],
+        question: FollowUpQuestion,
+        answer: str
+    ) -> Optional[Refinement]:
+        """Handle user answer for requirement conflict issues."""
+        logger.info(f"Handling requirement conflict: {answer[:100]}")
+
+        # User has specified which requirement takes priority
+        if "_userGuidedFixes" not in model:
+            model["_userGuidedFixes"] = []
+
+        model["_userGuidedFixes"].append({
+            "type": "REQUIREMENT_CONFLICT_RESOLVED",
+            "question": question.question[:100],
+            "resolution": answer,
+            "priority_decision": answer,
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        })
+
+        return Refinement(
+            refinement_id=self._get_next_refinement_id(),
+            refinement_type="manual",
+            description=f"Requirement conflict resolved: {answer[:80]}",
+            applied=True,
+            source_issue_type="REQUIREMENT_CONFLICT",
+            affected_path="_userGuidedFixes",
+            original_value="conflicting requirements",
+            new_value=answer[:100]
+        )
+
+    def _handle_duplicate_event_answer(
+        self,
+        model: Dict[str, Any],
+        question: FollowUpQuestion,
+        answer: str
+    ) -> Optional[Refinement]:
+        """Handle user answer for duplicate event issues."""
+        logger.info(f"Handling duplicate event: {answer[:100]}")
+
+        # User has specified which domain should emit the event
+        if "_userGuidedFixes" not in model:
+            model["_userGuidedFixes"] = []
+
+        model["_userGuidedFixes"].append({
+            "type": "DUPLICATE_EVENT_RESOLVED",
+            "question": question.question[:100],
+            "resolution": answer,
+            "chosen_emitter": answer,
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        })
+
+        return Refinement(
+            refinement_id=self._get_next_refinement_id(),
+            refinement_type="manual",
+            description=f"Duplicate event resolved: {answer[:80]}",
+            applied=True,
+            source_issue_type="DUPLICATE_EVENT",
+            affected_path="_userGuidedFixes",
+            original_value="multiple emitters",
+            new_value=answer[:100]
+        )
+
+    def _handle_naming_answer(
+        self,
+        model: Dict[str, Any],
+        question: FollowUpQuestion,
+        answer: str
+    ) -> Optional[Refinement]:
+        """Handle user answer for naming violation issues."""
+        logger.info(f"Handling naming violation: {answer[:100]}")
+
+        # If user provides a new name, apply it
+        # Simple heuristic: check if answer contains "should be" or "rename to"
+        if "should be" in answer.lower() or "rename" in answer.lower():
+            if "_userGuidedFixes" not in model:
+                model["_userGuidedFixes"] = []
+
+            model["_userGuidedFixes"].append({
+                "type": "NAMING_VIOLATION_RESOLVED",
+                "question": question.question[:100],
+                "resolution": answer,
+                "suggested_name": answer,
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            })
+
+            return Refinement(
+                refinement_id=self._get_next_refinement_id(),
+                refinement_type="manual",
+                description=f"Naming updated based on user input: {answer[:80]}",
+                applied=True,
+                source_issue_type="NAMING_VIOLATION",
+                affected_path="_userGuidedFixes",
+                original_value="incorrect naming",
+                new_value=answer[:100]
+            )
+
+        return None
+
+    def _handle_domain_classification_answer(
+        self,
+        model: Dict[str, Any],
+        question: FollowUpQuestion,
+        answer: str
+    ) -> Optional[Refinement]:
+        """Handle user answer for domain classification issues."""
+        logger.info(f"Handling domain classification: {answer[:100]}")
+
+        # User confirms or changes domain classification
+        if "_userGuidedFixes" not in model:
+            model["_userGuidedFixes"] = []
+
+        model["_userGuidedFixes"].append({
+            "type": "DOMAIN_CLASSIFICATION_RESOLVED",
+            "question": question.question[:100],
+            "resolution": answer,
+            "classification_decision": answer,
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        })
+
+        return Refinement(
+            refinement_id=self._get_next_refinement_id(),
+            refinement_type="manual",
+            description=f"Domain classification confirmed: {answer[:80]}",
+            applied=True,
+            source_issue_type="MISCLASSIFIED_DOMAIN",
+            affected_path="_userGuidedFixes",
+            original_value="uncertain classification",
+            new_value=answer[:100]
+        )
+
     def refine_model(
         self,
         domain_model: Dict[str, Any],
         semantic_issues: List[SemanticIssue],
         conflict_issues: List[ConflictIssue],
         follow_up_questions: List[FollowUpQuestion],
+        previous_answers: Dict[str, str] = None,
         apply_auto_fixes: bool = True
     ) -> Tuple[Dict[str, Any], RefinementReport]:
         """
         Apply refinements to the domain model.
-        
+
         Args:
             domain_model: Original domain model
             semantic_issues: Detected semantic issues
             conflict_issues: Detected conflict issues
             follow_up_questions: Generated follow-up questions
+            previous_answers: User answers from previous iteration (q0, q1, etc.)
             apply_auto_fixes: Whether to apply automatic fixes
-            
+
         Returns:
             Tuple of (refined model, refinement report)
         """
+        if previous_answers is None:
+            previous_answers = {}
+
         logger.info("Starting model refinement...")
+        if previous_answers:
+            logger.info(f"Applying {len(previous_answers)} user answers for iterative refinement")
         
         # Create deep copy to avoid modifying original
         refined = self._deep_copy_model(domain_model)
         refinements = []
         unresolved = []
         auto_fixed = 0
-        
+
         # Update metadata
         if "metadata" not in refined:
             refined["metadata"] = {}
-        
+
         refined["metadata"]["refinedAt"] = datetime.utcnow().isoformat() + "Z"
         refined["metadata"]["refinedBy"] = "agent-2-consistency-analyzer"
         refined["metadata"]["validationVersion"] = "1.0.0"
+
+        # Apply user answers from previous iteration (ITERATIVE REFINEMENT)
+        if previous_answers:
+            user_refinements = self._apply_user_answers(
+                refined,
+                follow_up_questions,
+                previous_answers
+            )
+            refinements.extend(user_refinements)
+            auto_fixed += len([r for r in user_refinements if r.applied])
         
         # Process semantic issues
         for issue in semantic_issues:

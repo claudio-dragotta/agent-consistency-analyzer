@@ -98,6 +98,10 @@ class DomainModelRequest(BaseModel):
     domain_model: Dict[str, Any]
     use_llm: bool = Field(default=True, description="Use LLM for deeper analysis")
     apply_auto_fixes: bool = Field(default=True, description="Apply automatic fixes")
+    previous_answers: Optional[Dict[str, str]] = Field(
+        default_factory=dict,
+        description="User answers from previous iteration for iterative model refinement"
+    )
 
 
 class ValidationSummary(BaseModel):
@@ -333,6 +337,7 @@ async def analyze_domain_model(request: DomainModelRequest):
             domain_model=request.domain_model,
             use_llm=request.use_llm,
             apply_auto_fixes=request.apply_auto_fixes,
+            previous_answers=request.previous_answers,
             return_full_result=True
         )
         
@@ -368,21 +373,25 @@ async def _process_domain_model(
     domain_model: Dict[str, Any],
     use_llm: bool = True,
     apply_auto_fixes: bool = True,
+    previous_answers: Dict[str, str] = None,
     return_full_result: bool = False
 ) -> Optional[ValidationResponse]:
     """
     Process a domain model through the full analysis pipeline.
-    
+
     Args:
         task_id: Task identifier
         domain_model: The domain model to analyze
         use_llm: Whether to use LLM for conflict detection
         apply_auto_fixes: Whether to apply automatic fixes
+        previous_answers: User answers from previous iteration for iterative refinement
         return_full_result: If True, return ValidationResponse; if False, update task
-        
+
     Returns:
         ValidationResponse if return_full_result, else None
     """
+    if previous_answers is None:
+        previous_answers = {}
     global semantic_analyzer, conflict_detector, question_generator, model_refiner
     
     try:
@@ -393,7 +402,11 @@ async def _process_domain_model(
             tasks_store[task_id] = task
         
         logger.info(f"[{task_id}] Starting semantic analysis...")
-        
+
+        # Log if this is an iterative refinement
+        if previous_answers:
+            logger.info(f"[{task_id}] Iterative refinement with {len(previous_answers)} user answers")
+
         # Step 1: Semantic Analysis (embeddings-based)
         semantic_issues = semantic_analyzer.analyze(domain_model)
         logger.info(f"[{task_id}] Found {len(semantic_issues)} semantic issues")
@@ -419,6 +432,7 @@ async def _process_domain_model(
             semantic_issues,
             conflict_issues,
             follow_up_questions,
+            previous_answers=previous_answers,
             apply_auto_fixes=apply_auto_fixes
         )
         logger.info(f"[{task_id}] Model refinement complete")
