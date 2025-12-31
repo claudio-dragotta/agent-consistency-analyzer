@@ -164,6 +164,7 @@ services:
       - N8N_PROTOCOL=http
       - WEBHOOK_URL=http://127.0.0.1:5678/
       - GENERIC_TIMEZONE=Europe/Rome
+      - AGENT2_API_URL=http://agent2-api:8002
     volumes:
       - n8n_data:/home/node/.n8n
       - ./n8n:/backup:ro

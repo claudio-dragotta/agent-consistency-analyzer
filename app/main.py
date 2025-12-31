@@ -1,4 +1,4 @@
-"""
+﻿"""
 FastAPI entry point for Agent 2 - Consistency & Conflict Analyzer
 
 Provides:
@@ -181,16 +181,34 @@ async def a2a_send_message(
     
     tasks_store[task_id] = task
     
-    # Extract domain model from message
+    # Extract domain model and optional previous answers from message
     domain_model = None
+    previous_answers: Dict[str, str] = {}
+    use_llm: bool = True
+    apply_auto_fixes: bool = True
     for part in request.message.parts:
         if part.data:
-            domain_model = part.data.data
-            break
+            # Direct data part
+            candidate = part.data.data
+            if isinstance(candidate, dict) and (
+                "domainMap" in candidate or "eventDrivenModel" in candidate or "integrations" in candidate
+            ):
+                domain_model = candidate
+                break
         elif part.text:
             try:
-                domain_model = json.loads(part.text)
+                parsed = json.loads(part.text)
+                # Heuristic: if it looks like a domain model, prefer it
+                if isinstance(parsed, dict) and (
+                    "domainMap" in parsed or "eventDrivenModel" in parsed or "integrations" in parsed
+                ):
+                    domain_model = parsed
+                    break
+                # Otherwise treat any dict payload as previous_answers (Q&A loop)
+                if isinstance(parsed, dict) and not previous_answers:
+                    previous_answers = {str(k): str(v) for k, v in parsed.items()}
             except json.JSONDecodeError:
+                # Ignore plain text parts
                 pass
     
     if not domain_model:
@@ -204,16 +222,41 @@ async def a2a_send_message(
         tasks_store[task_id] = task
         return A2AMessageResponse(task=task.model_dump(by_alias=True))
     
+    # Optional configuration overrides from A2A configuration.metadata
+    if request.configuration:
+        try:
+            meta = getattr(request.configuration, "metadata", None) or {}
+            if isinstance(meta, dict):
+                use_llm = bool(meta.get("use_llm", use_llm))
+                apply_auto_fixes = bool(meta.get("apply_auto_fixes", apply_auto_fixes))
+        except Exception:
+            pass
+
     # Check if blocking mode
     blocking = request.configuration.blocking if request.configuration else False
     
     if blocking:
         # Process synchronously
-        result = await _process_domain_model(task_id, domain_model, True, True)
+        result = await _process_domain_model(
+            task_id,
+            domain_model,
+            use_llm,
+            apply_auto_fixes,
+            previous_answers=previous_answers,
+            return_full_result=True,
+        )
         task = tasks_store[task_id]
     else:
         # Process in background
-        background_tasks.add_task(_process_domain_model, task_id, domain_model, True, True)
+        background_tasks.add_task(
+            _process_domain_model,
+            task_id,
+            domain_model,
+            use_llm,
+            apply_auto_fixes,
+            previous_answers,
+            False,
+        )
         task.status = TaskStatus(state=TaskState.WORKING)
         tasks_store[task_id] = task
     
@@ -348,7 +391,81 @@ async def analyze_domain_model(request: DomainModelRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/config")
+@a
+
+@app.get("/source/files")
+async def list_input_files() -> Dict[str, Any]:
+    """List available JSON files under INPUT_DIR for testing without Agent 1."""
+    try:
+        input_dir = Path(settings.INPUT_DIR)
+        files = []
+        if input_dir.exists():
+            for p in input_dir.glob("*.json"):
+                try:
+                    files.append({
+                        "name": p.name,
+                        "size": p.stat().st_size,
+                        "modified": datetime.utcfromtimestamp(p.stat().st_mtime).isoformat() + "Z",
+                    })
+                except Exception:
+                    files.append({"name": p.name})
+        return {"directory": str(input_dir), "files": files}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/source/file")
+async def get_input_file(name: str) -> Dict[str, Any]:
+    """Return the JSON content of a file from INPUT_DIR."""
+    try:
+        src = Path(settings.INPUT_DIR) / name
+        if not src.exists():
+            raise HTTPException(status_code=404, detail=f"File not found: {src}")
+        try:
+            data = json.loads(src.read_text(encoding="utf-8"))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid JSON in file: {e}")
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class AnalyzeByFileRequest(BaseModel):
+    file_name: str
+    use_llm: bool = True
+    apply_auto_fixes: bool = True
+    previous_answers: Optional[Dict[str, str]] = None
+
+
+@app.post("/source/analyze-by-file", response_model=ValidationResponse)
+async def analyze_by_file(request: AnalyzeByFileRequest):
+    """Analyze a domain model by selecting a JSON file from INPUT_DIR (testing helper)."""
+    try:
+        src = Path(settings.INPUT_DIR) / request.file_name
+        if not src.exists():
+            raise HTTPException(status_code=404, detail=f"File not found: {src}")
+        try:
+            domain_model = json.loads(src.read_text(encoding="utf-8"))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid JSON in file: {e}")
+
+        task_id = str(uuid.uuid4())
+        result = await _process_domain_model(
+            task_id=task_id,
+            domain_model=domain_model,
+            use_llm=request.use_llm,
+            apply_auto_fixes=request.apply_auto_fixes,
+            previous_answers=request.previous_answers or {},
+            return_full_result=True,
+        )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error analyzing file: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))pp.get("/config")
 async def get_configuration():
     """Get current configuration (for debugging)"""
     return {
@@ -534,3 +651,4 @@ if __name__ == "__main__":
         reload=settings.API_RELOAD,
         log_level=settings.LOG_LEVEL.lower(),
     )
+

@@ -1,723 +1,195 @@
-# Agent 2 - Consistency & Conflict Analyzer
-
-> Validatore intelligente per modelli Domain-Driven Design (DDD)
-
----
-
-## Quick Start (2 Minuti)
-
-### 1. Prerequisiti (Solo Prima Volta)
-
-#### Docker Desktop
-1. Scarica: https://www.docker.com/products/docker-desktop
-2. Installa e avvia Docker Desktop
-3. Aspetta che diventi verde (Running)
-
-#### Ollama + Llama3
-```bash
-# Installa Ollama da: https://ollama.ai/download
-# Poi scarica il modello:
-ollama pull llama3
-```
-
-### 2. Avvia la Demo
-
-#### Metodo 1: Doppio Click (Raccomandato)
-**Da Esplora File:** Doppio click su `START_DEMO.bat`
-
-#### Metodo 2: Da PowerShell
-```powershell
-cd C:\Users\TUO_USERNAME\Desktop\agent-consistency-analyzer
-.\START_DEMO.bat
-```
-
-**IMPORTANTE:** In PowerShell devi usare `.\` prima del nome del file!
-
-#### Metodo 3: Solo Container (Senza Browser)
-```powershell
-docker-compose up -d
-```
-Poi apri manualmente:
-- http://127.0.0.1:5678 (n8n)
-- http://localhost:8080 (Kafka UI)
-- http://localhost:8002/docs (API Docs)
-
-**Cosa fa START_DEMO.bat:**
-1. Build immagini Docker (1-2 min prima volta)
-2. Avvio tutti i servizi (Kafka, Agent 2, n8n, Kafka UI)
-3. Attesa 30 secondi per inizializzazione
-4. Apertura automatica 3 pagine web nel browser
-
-### 3. Usa n8n per Vedere la Demo
-
-1. **Setup n8n (solo prima volta):**
-   - Email: `demo@test.com`
-   - Password: `password123`
-   - Clicca "Get Started"
-
-2. **Scegli il Workflow:**
-
-   **Opzione A: Demo Semplice (Raccomandato per iniziare)**
-   - File: `n8n/workflow_demo_simple.json`
-   - Trigger: Manuale (clicca Execute Workflow)
-   - Output: Report statico con problemi e domande
-   - Tempo: 10-30 secondi
-
-   **Opzione B: Loop Interattivo Completo**
-   - File: `n8n/workflow_complete_loop.json`
-   - Trigger: Webhook (apri pagina web)
-   - Output: Form HTML per rispondere alle domande
-   - Loop: Agent analizza → chiede → utente risponde → raffina → ripete fino a modello perfetto
-   - Tempo: Variabile (dipende dalle tue risposte)
-
-3. **Importa Workflow:**
-   - Clicca "Workflows" → "Import from File"
-   - Seleziona il file desiderato
-
-4. **Esegui:**
-
-   **Se hai scelto Demo Semplice:**
-   - Clicca "Execute Workflow" (icona play)
-   - Attendi 10-30 secondi
-   - Vedi risultati nel nodo "4. RISULTATI FINALI"
-
-   **Se hai scelto Loop Interattivo:**
-   - Attiva il workflow (interruttore in alto a destra)
-   - Usa lo script di test: `.\TEST_INTERACTIVE_LOOP.bat`
-   - Oppure manualmente: apri http://127.0.0.1:5678/webhook/agent2-start
-   - Compila il form con il modello JSON
-   - Rispondi alle domande generate
-   - Il loop continua automaticamente fino a modello valido
-
----
-
-## Cosa Fa Agent 2
-
-**INPUT:** Modello funzionale da Agent 1 (formato JSON)
-
-**PROCESSO:**
-1. Valida 23 regole DDD automaticamente
-2. Rileva entity overlap (analisi semantica)
-3. Trova conflitti nei requisiti (LLM)
-4. Valida event-driven architecture
-5. Corregge automaticamente errori semplici
-6. Genera domande di follow-up per errori complessi
-
-**OUTPUT:**
-1. Report di validazione (status, problemi trovati, severity)
-2. 3-5 domande di follow-up con risposte suggerite
-3. Modello raffinato con correzioni automatiche
-
----
-
-## Differenze tra i Workflow
-
-### workflow_demo_simple.json (Raccomandato per iniziare)
-
-**Quando usarlo:**
-- Prima volta con Agent 2
-- Vuoi vedere rapidamente cosa fa l'agent
-- Test e debug
-- Demo a stakeholder
-
-**Caratteristiche:**
-- Trigger: Manuale (clicca Execute Workflow in n8n)
-- Input: Modello demo embedded nel workflow (3 problemi)
-- Output: Report statico con JSON
-- Durata: 10-30 secondi
-- Interattività: Nessuna (one-shot)
-
-**Vantaggi:**
-- Semplice da usare
-- Non richiede configurazione
-- Risultati immediati
-- Perfetto per capire Agent 2
-
-### workflow_complete_loop.json (Produzione)
-
-**Quando usarlo:**
-- Workflow di produzione
-- Integrazione con Agent 1 e Agent 3
-- Vuoi raffinare il modello iterativamente
-- Workflow completo end-to-end
-
-**Caratteristiche:**
-- Trigger: Webhook HTTP
-- Input: POST con modello JSON custom
-- Output: Form HTML interattivo
-- Durata: Variabile (dipende dalle iterazioni)
-- Interattività: Loop completo con Q&A
-
-**Vantaggi:**
-- Loop automatico fino a modello perfetto
-- Form HTML professionale
-- Integrazione facile con altri sistemi
-- Tracking delle iterazioni
-- Safety limit (max 5 loop)
-
-**Come funziona il loop:**
-```
-1. POST modello → Webhook
-2. Agent 2 analizza → trova 3 problemi
-3. Genera 3 domande → Form HTML
-4. Utente risponde → POST risposte
-5. Agent 2 ri-analizza con risposte → trova 1 problema
-6. Genera 1 domanda → Form HTML
-7. Utente risponde → POST risposte
-8. Agent 2 ri-analizza → VALIDO!
-9. Pagina di successo
-```
-
-**URL Webhook:**
-```
-POST http://127.0.0.1:5678/webhook/agent2-start
-```
-
----
-
-## Esempio di Output
-
-### File Demo: `input_agent/example_demo.json`
-
-Il file contiene **3 problemi intenzionali**:
-
-#### Problema 1: Entity "Product" Duplicata
-- **Dove:** In OrderContext E in CatalogContext
-- **Severity:** HIGH
-- **Output:** Domanda per chiarire se è lo stesso concetto o aspetti diversi
-
-#### Problema 2: Requisiti Contraddittori
-- **Dove:** FR-ORD-001 (immutabile) vs FR-ORD-002 (modificabile)
-- **Severity:** HIGH
-- **Output:** Domanda per definire quando diventa immutabile
-
-#### Problema 3: Evento con 2 Emitter
-- **Dove:** OrderCreated emesso da OrderService E PaymentService
-- **Severity:** CRITICAL
-- **Output:** Correzione automatica + domanda per conferma
-
----
-
-## Stop Demo
-
-**Doppio click su:** `docker-stop.bat`
-
-Oppure:
-```bash
-docker-compose down
-```
-
----
-
-## Link Utili
-
-| Servizio | URL | Descrizione |
-|----------|-----|-------------|
-| **n8n** | http://127.0.0.1:5678 | Workflow visuale |
-| **Kafka UI** | http://localhost:8080 | Monitoraggio code |
-| **API Docs** | http://localhost:8002/docs | Test API |
-| **Health** | http://localhost:8002/health | Stato sistema |
-
----
-
-## Struttura File
-
-```
-agent-consistency-analyzer/
-├── START_DEMO.bat                     ← AVVIA QUI!
-├── TEST_INTERACTIVE_LOOP.bat          ← Test workflow interattivo
-├── docker-stop.bat                    ← Stop tutto
-├── docker-compose.yml                 ← Config Docker
-├── README.md                          ← Questo file
-│
-├── input_agent/
-│   ├── example_demo.json             ← File demo (3 problemi)
-│   ├── example_bad.json              ← Test completo (23 problemi)
-│   └── example_good.json             ← Modello valido
-│
-├── n8n/
-│   ├── workflow_complete_loop.json   ← Loop interattivo (PRODUZIONE)
-│   └── workflow_demo_simple.json     ← Test rapidi
-│
-├── knowledge_base/
-│   ├── ddd_rules.md                  ← 23 regole DDD
-│   └── validation_checklist.json     ← Checklist validazione
-│
-└── app/                              ← Codice sorgente Python
-    ├── api/                          ← FastAPI endpoints
-    ├── services/                     ← Logica validazione
-    └── kafka/                        ← Consumer/Producer Kafka
-```
-
----
-
-## Test API Diretti (Opzionale)
-
-### Test 1: Health Check
-```bash
-curl http://localhost:8002/health
-```
-
-**Risposta attesa:**
-```json
-{"status": "healthy", "version": "1.0.0"}
-```
-
-### Test 2: Analisi Completa
-```bash
-curl -X POST http://localhost:8002/analyze \
-  -H "Content-Type: application/json" \
-  -d @input_agent/example_demo.json
-```
-
-**Risposta attesa:** JSON con:
-- `validation_report`: Status + problemi trovati
-- `follow_up_questions`: 3 domande
-- `refined_model`: Modello corretto
-
----
-
-## Tecnologie
-
-- **Python 3.11+** - Linguaggio principale
-- **FastAPI** - Web framework
-- **Kafka** - Message queue
-- **Ollama + Llama3** - LLM locale
-- **Sentence Transformers** - Embeddings
-- **Docker** - Containerizzazione
-- **n8n** - Workflow automation
-
----
-
-## Troubleshooting
-
-### "START_DEMO.bat: The term is not recognized"
-**Problema:** In PowerShell il comando non viene riconosciuto
-**Soluzione:** Usa `.\START_DEMO.bat` invece di `START_DEMO.bat`
-
-```powershell
-# SBAGLIATO
-START_DEMO.bat
-
-# CORRETTO
-.\START_DEMO.bat
-```
-
-### "docker-compose up -d funziona ma non si aprono le pagine"
-**Problema:** `docker-compose up -d` avvia solo i container, non apre i browser
-**Soluzione:** Usa `.\START_DEMO.bat` oppure apri manualmente le pagine:
-
-```powershell
-start http://127.0.0.1:5678
-start http://localhost:8080
-start http://localhost:8002/docs
-```
-
-### "Kafka is unhealthy" o "dependency failed to start"
-**Problema:** Kafka impiega tempo a diventare healthy
-**Soluzione:** Aspetta 30-60 secondi, poi riavvia i servizi dipendenti:
-
-```powershell
-docker-compose up -d agent2-api agent2-consumer
-```
-
-### "Docker non parte"
-**Soluzione:** Apri Docker Desktop e aspetta che diventi verde (Running)
-
-### "n8n non si apre"
-```bash
-docker restart agent2-n8n
-# Aspetta 30 secondi, poi ricarica http://127.0.0.1:5678
-```
-
-### "Kafka UI non si apre"
-```bash
-docker restart agent2-kafka-ui
-# Aspetta 30 secondi, poi ricarica http://localhost:8080
-```
-
-### "Timeout nel workflow n8n"
-**Causa:** LLM (Llama3) sta processando
-**Soluzione:** Aspetta fino a 60 secondi
-
-### "Ollama non risponde"
-```bash
-# Verifica Ollama
-ollama list
-# Dovresti vedere "llama3"
-
-# Testa Ollama
-ollama run llama3 "Hello"
-```
-
----
-
-## Architettura Pipeline Completa
-
-```
-┌─────────────┐      ┌─────────────┐      ┌─────────────┐
-│  AGENT 1    │      │  AGENT 2    │      │  AGENT 3    │
-│             │      │             │      │             │
-│  Domain     │─────▶│ Consistency │─────▶│ Functional  │
-│  Modeler    │Kafka │ Analyzer    │Kafka │ Spec Gen    │
-└─────────────┘      └─────────────┘      └─────────────┘
-      │                     │                     │
-   Intervista          Valida &             Genera Specs
-  Stakeholder          Corregge             Funzionali
-```
-
-**Questo repo contiene Agent 2.**
-
----
-
-## Deployment Production
-
-Per deployment production-ready, vedi:
-- [docker-compose.yml](docker-compose.yml) - Config production
-- Sezione "Scaling" per aumentare worker
-- Sezione "Monitoring" per Prometheus/Grafana
-
----
-
-## Le 23 Regole di Validazione
-
-Agent 2 controlla automaticamente:
-
-### Struttura Dominio (7 regole)
-1. Core domain deve essere definito
-2. Bounded context deve avere almeno un aggregate
-3. Aggregate root deve essere definito
-4. Entity deve avere ID univoco
-5. Value Object deve essere immutabile
-6. Domain Service correttamente classificato
-7. Anti-Corruption Layer per sistemi legacy
-
-### Requisiti (5 regole)
-8. Functional Requirements ben definiti
-9. Non-Functional Requirements specificati
-10. Nessun conflitto tra requisiti
-11. Business Rules complete
-12. Invarianti del dominio preservati
-
-### Event-Driven (6 regole)
-13. Eventi seguono nomenclatura passato (OrderCreated)
-14. Eventi hanno emittente singolo (Single Emitter Rule)
-15. Subscribers ben definiti
-16. Event Storming completo
-17. Saga pattern per transazioni distribuite
-18. Event Sourcing dove appropriato
-
-### Comunicazione (5 regole)
-19. Context Map ben definito
-20. Relationship type corretto (Customer/Supplier, etc.)
-21. Shared Kernel minimizzato
-22. Published Language per integrazione
-23. Conformist pattern solo dove necessario
-
-**Dettaglio completo:** [knowledge_base/validation_checklist.json](knowledge_base/validation_checklist.json)
-
----
-
-## Come Funziona il Flusso di Processing
-
-### Pipeline Completa: Da Agent 1 ad Agent 3
-
-Agent 2 è il secondo step di una pipeline a 3 agenti. Ecco come i dati fluiscono:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ AGENT 1: Domain Modeler                                        │
-│ ─────────────────────────                                      │
-│ INPUT:  Intervista stakeholder                                 │
-│ OUTPUT: domain_model.json (modello funzionale DDD)             │
-└─────────────────────────────────────────────────────────────────┘
-                           │
-                           │ Kafka Topic: domain-model-created
-                           ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ AGENT 2: Consistency Analyzer (QUESTO REPO)                    │
-│ ──────────────────────────────────────                         │
-│ INPUT:  domain_model.json da Agent 1                           │
-│                                                                 │
-│ PROCESSING:                                                     │
-│ 1. Validazione 23 regole DDD                                   │
-│ 2. Semantic analysis (entity overlap detection)                │
-│ 3. Conflict detection (requirement contradictions)             │
-│ 4. Event architecture validation                               │
-│ 5. Auto-fix problemi semplici                                  │
-│ 6. Generazione domande follow-up per problemi complessi        │
-│ 7. Loop interattivo con utente (se necessario)                 │
-│                                                                 │
-│ OUTPUT:                                                         │
-│ - validation_report.json (status, issues, severity)            │
-│ - refined_model.json (modello corretto + metadata)             │
-│ - follow_up_answers.json (risposte utente tracciate)           │
-└─────────────────────────────────────────────────────────────────┘
-                           │
-                           │ Kafka Topic: domain-model-validated
-                           ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ AGENT 3: Functional Spec Generator                             │
-│ ───────────────────────────────────                            │
-│ INPUT:  refined_model.json da Agent 2                          │
-│ OUTPUT: specifiche_funzionali.pdf (documentazione completa)    │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Dettaglio Processing di Agent 2
-
-Quando Agent 2 riceve un modello da Agent 1, esegue questi passaggi:
-
-#### Step 1: Ricezione Input
-
-```json
-POST /analyze
-{
-  "domain_model": {...},           // Modello da Agent 1
-  "use_llm": true,                 // Usa Llama3 per analisi profonda
-  "apply_auto_fixes": true,        // Correggi automaticamente errori semplici
-  "previous_answers": {}           // Vuoto alla prima iterazione
-}
-```
-
-#### Step 2: Validazione Strutturale (Rule-Based)
-
-- Controlla presenza di Core Domain
-- Verifica Bounded Context definiti
-- Valida Aggregate Root
-- Controlla Entity con ID univoci
-- Valida Value Objects immutabili
-- **Output:** Lista di `structural_issues`
-
-#### Step 3: Semantic Analysis (Embeddings)
-
-- Calcola embeddings per tutte le Entity
-- Confronta similarità semantica tra Entity in diversi Bounded Context
-- Se similarità > 0.85 → possibile duplicato
-- **Output:** Lista di `semantic_issues` (entity overlaps)
-
-#### Step 4: Conflict Detection (LLM)
-
-- Analizza Functional Requirements
-- Cerca contraddizioni logiche (es. "immutabile" vs "modificabile")
-- Usa Llama3 per reasoning semantico
-- **Output:** Lista di `conflict_issues`
-
-#### Step 5: Event Architecture Validation
-
-- Verifica naming eventi (passato: OrderCreated, non CreateOrder)
-- Controlla Single Emitter Rule (1 evento = 1 emittente)
-- Valida subscribers definiti
-- **Output:** Lista di `event_issues`
-
-#### Step 6: Auto-Fixing
-
-Se `apply_auto_fixes=true`:
-
-- Rinomina eventi con naming errato
-- Aggiunge metadata mancanti
-- Corregge classificazioni domain evidenti
-- **Output:** `refined_model` con correzioni applicate
-
-#### Step 7: Question Generation
-
-Per problemi complessi (non auto-fixable):
-
-- Genera domanda specifica per ogni problema
-- Propone 2-3 risposte suggerite
-- Categorizza per tipo (entity_overlap, requirement_conflict, etc.)
-- **Output:** Lista di `follow_up_questions`
-
-#### Step 8: Iterative Refinement Loop (NOVITÀ v1.2.0)
-
-**Se ci sono follow-up questions:**
-
-```
-Iterazione 0:
-├─ Input: domain_model originale + previous_answers={}
-├─ Processing: Trova 3 problemi
-├─ Output: 3 domande
-└─ User: Risponde via form HTML
-
-Iterazione 1:
-├─ Input: domain_model originale + previous_answers={q0: "...", q1: "...", q2: "..."}
-├─ Processing:
-│  ├─ Applica risposte utente al modello
-│  ├─ Registra decisioni in _userGuidedFixes
-│  ├─ Ri-analizza il modello aggiornato
-│  └─ Trova 1 problema (migliorato!)
-├─ Output: 1 domanda
-└─ User: Risponde
-
-Iterazione 2:
-├─ Input: domain_model + previous_answers={q0: "..."}
-├─ Processing:
-│  ├─ Applica risposta utente
-│  ├─ Ri-analizza
-│  └─ Nessun problema trovato
-├─ Output: STATUS=VALID
-└─ Fine loop
-```
-
-**Come le risposte vengono applicate:**
-
-Quando l'utente risponde (es. "Order appartiene solo a OrderManagement"):
-
-1. `ModelRefiner._apply_user_answers()` riceve le risposte
-2. Routing alla funzione handler appropriata in base alla categoria:
-   - `entity_overlap` → `_handle_entity_overlap_answer()`
-   - `requirement_conflict` → `_handle_requirement_conflict_answer()`
-   - `duplicate_event` → `_handle_duplicate_event_answer()`
-   - `naming_violation` → `_handle_naming_answer()`
-   - `domain_classification` → `_handle_domain_classification_answer()`
-3. L'handler:
-   - Interpreta la risposta (NLP semplice con keyword matching)
-   - Applica modifiche al modello (es. rimuove entità duplicata)
-   - Registra decisione in `refined_model._userGuidedFixes`:
-
-     ```json
-     {
-       "type": "ENTITY_OVERLAP_RESOLVED",
-       "question": "L'entità Order esiste in OrderManagement e Shipping...",
-       "resolution": "Order appartiene solo a OrderManagement",
-       "timestamp": "2025-12-19T10:30:00.000Z"
-     }
-     ```
-
-   - Restituisce `Refinement(applied=True)`
-4. Il modello raffinato viene ri-analizzato nell'iterazione successiva
-5. Se nuovi problemi → nuove domande, altrimenti → VALID
-
-**Tracciabilità:**
-
-Il modello finale contiene tutte le decisioni utente:
-```json
-{
-  "metadata": {
-    "refinedAt": "2025-12-19T10:30:00.000Z",
-    "refinedBy": "agent-2-consistency-analyzer",
-    "validationVersion": "1.2.0"
-  },
-  "_userGuidedFixes": [
-    {"type": "ENTITY_OVERLAP_RESOLVED", "resolution": "..."},
-    {"type": "REQUIREMENT_CONFLICT_RESOLVED", "resolution": "..."},
-    {"type": "DUPLICATE_EVENT_RESOLVED", "resolution": "..."}
-  ],
-  "_validationAnnotations": [
-    // Problemi non risolti automaticamente
-  ]
-}
-```
-
-Questo è fondamentale per **Agent 3**, che può usare `_userGuidedFixes` per generare specifiche funzionali più accurate, sapendo esattamente quali decisioni di design sono state prese.
-
-#### Step 9: Output Finale
+# Agent 2 — Consistency & Conflict Analyzer
+
+Validatore intelligente per modelli Domain‑Driven Design (DDD). Analizza la coerenza semantica, rileva conflitti tra bounded context, verifica la correttezza dell’architettura event‑driven, genera domande di follow‑up e produce un modello raffinato pronto per Agent 3 (generazione specifiche).
+
+## Panoramica Ecosistema
+
+- Pipeline: Agent 1 (Domain Interviewer) → Agent 2 (Consistency & Conflict Analyzer) → Agent 3 (Specification Generator).
+- Ingresso Agent 2:
+  - REST: `POST /analyze` con `domain_model` (demo/locale).
+  - Kafka: topic input `agent1-output` (produzione).
+- Uscita Agent 2:
+  - Kafka: topic output `agent2-output` (consumato da Agent 3).
+  - File: salvataggio risultati in `output_agent/` nel container.
+- Endpoint chiave Agent 2: `/health`, `/.well-known/agent.json`, `/analyze`, A2A (`/a2a/message/send`, `/a2a/tasks`).
+- Strumenti: n8n (http://127.0.0.1:5678), Kafka UI (http://localhost:8080), API Docs (http://localhost:8002/docs).
+
+## Quick Start (2 minuti)
+
+### 1) Prerequisiti
+- Docker Desktop installato.
+- Ollama con modello `llama3` scaricato: `ollama pull llama3`.
+- Facoltativo: Python 3.11 per esecuzione senza Docker.
+
+### 2) Avvio Demo (unico script PowerShell)
+- Apri PowerShell e lancia:
+  - `cd C:\Users\TUO_USERNAME\Desktop\agent-consistency-analyzer`
+  - `powershell -ExecutionPolicy Bypass -File .\START_DEMO.ps1`
+
+Lo script verifica/avvia Docker Desktop, seleziona automaticamente `docker compose`/`docker-compose`, avvia lo stack e apre le pagine.
+
+Pagine utili:
+- n8n: http://127.0.0.1:5678
+- Kafka UI: http://localhost:8080
+- API Docs: http://localhost:8002/docs
+
+### 3) Demo in n8n
+- Primo accesso: crea account.
+- Importa workflow da file: Workflows → Import from File.
+  - `n8n/workflow_demo_simple.json` → esecuzione singola, più semplice.
+  - `n8n/workflow_complete_loop.json` → loop interattivo con domande/risposte.
+- Avvio:
+  - Demo semplice: premi “Execute Workflow” e osserva i risultati.
+  - Loop interattivo: attiva il workflow (toggle verde) e apri http://127.0.0.1:5678/webhook/agent2-start.
+
+Nota Webhook n8n:
+- URL “test” (`/webhook-test/...`) funziona solo dopo “Execute Workflow” ed è valido per una sola richiesta.
+- URL “prod” (`/webhook/...`) richiede il workflow ATTIVO. L’errore 404 “requested webhook … not registered” indica che non è attivo o non sei in test mode.
+
+## Cosa fa Agent 2
+
+- Input: modello funzionale (JSON) da Agent 1.
+- Processo:
+  - Regole DDD e checklist dalla knowledge base.
+  - Analisi semantica (embeddings) per overlap/ambiguità.
+  - Rilevazione conflitti (regole + LLM con Ollama/Llama3).
+  - Validazioni EDA (naming eventi, single‑emitter, payload minimo).
+  - Auto‑fix per violazioni semplici e generazione domande di follow‑up.
+- Output:
+  - Report dettagliato per categoria e severità.
+  - Domande prioritarie e suggerimenti.
+  - Modello raffinato con metadati pronto per Agent 3.
+
+## API REST principali
+
+- `GET /` — info agente ed elenco endpoint.
+- `GET /health` — stato servizi e configurazione.
+- `GET /.well-known/agent.json` — Agent Card (A2A Protocol).
+- `POST /analyze` — analizza un modello e restituisce report + modello raffinato.
+
+Esempio `POST /analyze`:
 
 ```json
 {
-  "status": "VALID" | "ISSUES_FOUND" | "CRITICAL_ISSUES",
-  "summary": {
-    "total_issues": 0,
-    "entity_overlaps": 0,
-    "requirement_conflicts": 0,
-    "naming_violations": 0
-  },
-  "validation_report": {
-    "semantic_issues": [],
-    "conflict_issues": [],
-    "event_issues": []
-  },
-  "follow_up_questions": [],
-  "refined_model": { ... },  // Con _userGuidedFixes e metadata
-  "refinement_report": {
-    "auto_fixed": 3,
-    "requires_manual": 0,
-    "refinements": [...]
-  }
+  "domain_model": { "..." },
+  "use_llm": true,
+  "apply_auto_fixes": true,
+  "previous_answers": { "FUQ-001": "risposta utente opzionale" }
 }
 ```
 
-### Kafka Integration
+Endpoint A2A per orchestrazione fra agenti:
+- `POST /a2a/message/send`
+- `GET /a2a/tasks`, `GET /a2a/tasks/{task_id}`, `POST /a2a/tasks/{task_id}/cancel`
 
-Agent 2 può funzionare in 2 modalità:
+Endpoint locali per test/file picker (usati dal workflow con fallback se manca il modello in ingresso):
+- `GET /source/files` — elenco dei JSON in `input_agent`.
+- `GET /source/file?name=...` — contenuto del file richiesto.
+- `POST /source/analyze-by-file` — analizza un file per nome.
 
-#### Modalità 1: API Diretta (Demo)
+## Workflow n8n
 
-- POST /analyze
-- Risposta sincrona
-- Usato nei workflow n8n
+### `n8n/workflow_demo_simple.json`
+- Quando: primo utilizzo, demo rapide, debug.
+- Caratteristiche: trigger manuale, input demo incorporato.
 
-#### Modalità 2: Kafka Consumer/Producer (Produzione)
+### `n8n/workflow_complete_loop.json`
+- Quando: flusso interattivo reale, integrazione con Agent 1/3.
+- Caratteristiche: trigger Webhook, form HTML per le risposte, safety limit max 5 iterazioni.
+- Flusso: “Invio modello → Analisi → Domande → Risposte → Raffinamento → Ripeti finché valido”.
+- URL ANALIZZA preconfigurato per Docker Compose: `http://agent2-api:8002/analyze` (via env `AGENT2_API_URL`).
+- Se non passi `domain_model`, il workflow mostra una pagina “Seleziona Modello” che legge l’elenco da `http://localhost:8002/source/files` e prosegue automaticamente dopo la scelta.
 
-- Consumer: Ascolta topic `domain-model-created`
-- Processing: Analizza modello
-- Producer: Pubblica su topic `domain-model-validated`
-- Integrazione seamless con Agent 1 e Agent 3
+## Integrazione Kafka
 
----
+- Consumer avanzato: `app/kafka/consumer_advanced.py` (processi paralleli, invio ad Agent 3).
+- Producer risultati: `app/kafka/producer.py` (topic output).
+- Topic predefiniti: input `agent1-output`, output `agent2-output` (configurabili via env).
+- Kafka UI: monitoraggio messaggi e topic.
 
-## Novità v1.2.0: Raffinamento Iterativo Reale
+## Configurazione
 
-### Problema Risolto
+- File `.env.example` (locale) e `.env.docker` (Docker):
+  - Ollama: `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_TIMEOUT`.
+  - Kafka: `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_INPUT_TOPIC`, `KAFKA_OUTPUT_TOPIC`, `KAFKA_GROUP_ID`.
+  - API: `API_PORT` (default 8002), `LOG_LEVEL`.
+  - Analisi: `EMBEDDINGS_MODEL`, `ENTITY_OVERLAP_THRESHOLD`, `SEMANTIC_SIMILARITY_THRESHOLD`, `MAX_FOLLOW_UP_QUESTIONS`.
+- Knowledge base: `knowledge_base/ddd_rules.md`, `knowledge_base/validation_checklist.json`.
+- Esempi input: `input_agent/` (guida in `input_agent/README_DEMO.md`).
 
-Nelle versioni precedenti, il workflow n8n inviava le `previous_answers` all'API, ma l'API **non le riceveva né le processava**. Questo causava un loop che **non migliorava progressivamente** il modello:
+Esecuzione locale senza Docker:
+- `pip install -r requirements.txt`
+- `uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload`
 
-```text
-❌ PRIMA (v1.1.0):
-Iter 0: 3 problemi → 3 domande
-User risponde
-Iter 1: 3 problemi (STESSI!) → Loop infinito
-```
+## Novità v1.2.0 — Raffinamento Iterativo
 
-### Fix Implementato
+- Body `/analyze` esteso con `previous_answers` per passare le risposte dell’utente.
+- Applicazione risposte in `ModelRefiner._apply_user_answers()` con 5 handler:
+  - `entity_overlap`, `requirement_conflict`, `duplicate_event`, `naming_violation`, `domain_classification`.
+- Tracciabilità in `_userGuidedFixes` dentro il modello raffinato.
+- Effetto: ad ogni iterazione i problemi diminuiscono fino a `VALID`.
 
-**Modifiche a `app/main.py`:**
+## Struttura progetto (principale)
 
-- Aggiunto campo `previous_answers: Dict[str, str]` a `DomainModelRequest`
-- Passato `previous_answers` attraverso tutta la pipeline di processing
-- Logging per tracciare raffinamento iterativo
+- `app/main.py` — FastAPI, endpoint REST e A2A, orchestrazione pipeline.
+- `app/services/semantic_analyzer.py` — embeddings e similarità (overlap/ambiguità).
+- `app/services/conflict_detector.py` — conflitti (regole + LLM via Ollama).
+- `app/services/question_generator.py` — generazione domande.
+- `app/services/model_refiner.py` — raffinamento modello e report.
+- `app/kafka/*` — consumer/producer Kafka.
+- `knowledge_base/*` — regole DDD e checklist.
+- `n8n/*` — workflow pronti all’uso.
+- `Dockerfile`, `docker-compose.yml`, `START_DEMO.ps1` — packaging e demo.
 
-**Modifiche a `app/services/model_refiner.py`:**
+## Info progetto
 
-- Aggiunto parametro `previous_answers` a `refine_model()`
-- Implementato metodo `_apply_user_answers()` che processa le risposte
-- Implementati 5 handler specializzati per categoria:
-  - `_handle_entity_overlap_answer()`
-  - `_handle_requirement_conflict_answer()`
-  - `_handle_duplicate_event_answer()`
-  - `_handle_naming_answer()`
-  - `_handle_domain_classification_answer()`
-- Ogni handler interpreta la risposta e applica modifiche al modello
-- Tutte le decisioni vengono registrate in `_userGuidedFixes`
+- Versione: 1.2.0 (vedi `CHANGELOG.md`).
+- Stato: Production Ready.
+- Ultimo aggiornamento: 2025‑12‑19.
+- Licenza: MIT.
+- Changelog: `CHANGELOG.md`.
 
-### Risultato
+## Troubleshooting rapido
 
-```text
-✓ DOPO (v1.2.0):
-Iter 0: 3 problemi → 3 domande
-User risponde
-Iter 1: 1 problema (migliorato!) → 1 domanda
-User risponde
-Iter 2: 0 problemi → VALID ✓
-```
+- Webhook 404: attiva il workflow (toggle verde) oppure usa “Execute Workflow” e chiama l’URL “test”.
+- Porta 5678 occupata: lo script riusa n8n esterno se già in esecuzione; altrimenti arresta il container esterno o libera la porta.
+- Docker non parte: apri manualmente Docker Desktop, poi rilancia `START_DEMO.ps1`.
+- Analisi lenta: imposta `use_llm=false` in `/analyze`.
 
-**Benefici:**
+Buon lavoro con Agent 2!
 
-- Il modello migliora progressivamente ad ogni iterazione
-- Tracciabilità completa delle decisioni utente
-- Agent 3 può usare `_userGuidedFixes` per specifiche più accurate
-- Backward compatible (previous_answers opzionale)
-
----
-
-## Info Progetto
-
-- **Versione:** 1.2.0
-- **Status:** Production Ready
-- **Ultimo Aggiornamento:** 2025-12-19
-- **Licenza:** MIT
-- **Changelog:** [CHANGELOG.md](CHANGELOG.md)
-
----
-
-**Buon lavoro con Agent 2!**
+**Blocchi Workflow (Complete Loop)**
+- START – Webhook Principale
+  - Tipo: `Webhook` (POST), path `agent2-start`, `responseMode=responseNode`.
+  - Input: `domain_model?`, `session_id?`, `iteration?`, `previous_answers?`, `max_iterations?`.
+  - Note: per l’URL produzione usa `/webhook/agent2-start` con workflow attivo; in test usa `/webhook-test/...` dopo “Execute Workflow”.
+- Prepara Dati
+  - Tipo: `Set`.
+  - Imposta: `iteration=0` se assente; `max_iterations=5`; `session_id` default ISO now; `domain_model` da `$json.body.domain_model || $json.domain_model` (stringificato); `previous_answers` da `$json.body.answers || {}`.
+  - Output: normalizza i campi per i nodi successivi.
+- Modello Presente?
+  - Tipo: `IF`.
+  - Condizione: il `domain_model` è valorizzato? Se no → “Seleziona Modello”.
+- Seleziona Modello
+  - Tipo: `Respond to Webhook` (HTML).
+  - Cosa fa: mostra lista dei file da `GET http://localhost:8002/source/files`; al click legge `GET /source/file?name=...` e re‑POSTa a `/webhook/agent2-start` con `domain_model` scelto.
+- Max Iterazioni?
+  - Tipo: `IF`.
+  - Condizione: `iteration < max_iterations`. Se false → “Pagina Successo” (stop di sicurezza).
+- ANALIZZA (iterativa)
+  - Tipo: `HTTP Request` POST.
+  - URL: `={{ $env.AGENT2_API_URL || 'http://host.docker.internal:8002' }}/analyze`.
+  - Body: `domain_model` (JSON), `use_llm=true`, `apply_auto_fixes=true`, `previous_answers` (se presenti).
+  - Output: risposta dell’API con `status`, `summary`, `follow_up_questions`, `refined_model`.
+- Combina Risultati con Contesto
+  - Tipo: `Function/Set`.
+  - Cosa fa: incrementa `iteration`, aggiorna `domain_model` con `refined_model`, serializza `summary`/`follow_up_questions` per il form.
+- Modello Valido?
+  - Tipo: `IF`.
+  - Condizione: `status === 'VALID'`. Se true → “Pagina Successo”, altrimenti → “Form Domande HTML”.
+- Form Domande HTML
+  - Tipo: `Respond to Webhook` (HTML form).
+  - Cosa fa: visualizza le domande con severità, raccoglie le risposte e le invia a `/webhook/agent2-start` per l’iterazione successiva.
+- Pagina Successo
+  - Tipo: `Respond to Webhook`.
+  - Cosa fa: mostra riepilogo finale (conteggi, stato) e termina il flusso.

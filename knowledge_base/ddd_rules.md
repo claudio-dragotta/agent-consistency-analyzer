@@ -15,11 +15,11 @@ Il Core Domain è la parte del sistema che genera il **vantaggio competitivo** o
 
 | Criterio | Domanda da porsi | Se SÌ → probabilmente Core |
 |----------|------------------|---------------------------|
-| **Differenziazione** | Se lo facciamo meglio degli altri, vinciamo? | ✓ Core |
-| **Impatto economico** | Influenza direttamente ricavi, KPI principali, retention? | ✓ Core |
-| **Complessità intrinseca** | Ha molte regole, eccezioni, vincoli temporali/operativi? | ✓ Core |
-| **Frequenza di cambiamento** | Evolve spesso con nuove regole, promozioni, policy? | ✓ Core |
-| **Sensibilità agli errori** | Un errore costa molto (SLA, sicurezza, legale, reputazione)? | ✓ Core |
+| **Differenziazione** | Se lo facciamo meglio degli altri, vinciamo |  Core |
+| **Impatto economico** | Influenza direttamente ricavi, KPI principali, retention |  Core |
+| **Complessità intrinseca** | Ha molte regole, eccezioni, vincoli temporali/operativi |  Core |
+| **Frequenza di cambiamento** | Evolve spesso con nuove regole, promozioni, policy |  Core |
+| **Sensibilità agli errori** | Un errore costa molto (SLA, sicurezza, legale, reputazione) |  Core |
 
 #### Caratteristiche Attese di un Core Domain Ben Definito
 
@@ -30,10 +30,10 @@ Il Core Domain è la parte del sistema che genera il **vantaggio competitivo** o
 
 #### Segnali di Allarme (Classificazione ERRATA come Core)
 
-- ❌ È una commodity: esistono prodotti/servizi standard che lo fanno bene
-- ❌ Le regole sono poche e stabili
-- ❌ Non c'è investimento in linguaggio e modello ("basta farlo funzionare")
-- ❌ Può essere facilmente sostituito con un servizio esterno
+-  È una commodity: esistono prodotti/servizi standard che lo fanno bene
+-  Le regole sono poche e stabili
+-  Non c'è investimento in linguaggio e modello ("basta farlo funzionare")
+-  Può essere facilmente sostituito con un servizio esterno
 
 ---
 
@@ -46,10 +46,10 @@ Un Supporting Domain **supporta** il Core Domain: è necessario per far funziona
 
 | Criterio | Domanda da porsi | Se SÌ → probabilmente Supporting |
 |----------|------------------|--------------------------------|
-| **Necessità** | Serve per far funzionare il Core? | ✓ Supporting |
-| **Non differenziante** | Se lo facciamo come gli altri, non perdiamo? | ✓ Supporting |
-| **Stabilità** | Le regole cambiano raramente? | ✓ Supporting |
-| **Sostituibilità parziale** | Potremmo usare una soluzione standard con adattamenti? | ✓ Supporting |
+| **Necessità** | Serve per far funzionare il Core |  Supporting |
+| **Non differenziante** | Se lo facciamo come gli altri, non perdiamo |  Supporting |
+| **Stabilità** | Le regole cambiano raramente |  Supporting |
+| **Sostituibilità parziale** | Potremmo usare una soluzione standard con adattamenti |  Supporting |
 
 #### Differenze dal Core Domain
 
@@ -71,10 +71,10 @@ Un Generic Domain è una **capacità comune e non differenziante** che può esse
 
 | Criterio | Domanda da porsi | Se SÌ → probabilmente Generic |
 |----------|------------------|------------------------------|
-| **Standardizzazione** | È un problema risolto e ben compreso? | ✓ Generic |
-| **Sostituibilità totale** | Possiamo cambiare provider senza impatto sul business? | ✓ Generic |
-| **Nessun vantaggio** | Reinventarlo non porta alcun vantaggio competitivo? | ✓ Generic |
-| **Complessità tecnica** | La complessità è tecnica, non di business? | ✓ Generic |
+| **Standardizzazione** | È un problema risolto e ben compreso |  Generic |
+| **Sostituibilità totale** | Possiamo cambiare provider senza impatto sul business |  Generic |
+| **Nessun vantaggio** | Reinventarlo non porta alcun vantaggio competitivo |  Generic |
+| **Complessità tecnica** | La complessità è tecnica, non di business |  Generic |
 
 #### Esempi Tipici di Generic Domain
 
@@ -145,10 +145,10 @@ Oggetto definito dalla sua **identità (ID)** e dal suo **ciclo di vita**. Anche
 
 | Criterio | Domanda | Se SÌ → Entity |
 |----------|---------|----------------|
-| **Tracciabilità temporale** | Devo tracciarlo nel tempo (storia, audit, stato)? | ✓ Entity |
-| **Distinguibilità** | Devo distinguerlo da altri con stessi attributi? | ✓ Entity |
-| **Ciclo di vita** | Ha stati: creato → aggiornato → archiviato? | ✓ Entity |
-| **Riferimenti esterni** | Altri oggetti lo puntano tramite ID? | ✓ Entity |
+| **Tracciabilità temporale** | Devo tracciarlo nel tempo (storia, audit, stato) |  Entity |
+| **Distinguibilità** | Devo distinguerlo da altri con stessi attributi |  Entity |
+| **Ciclo di vita** | Ha stati: creato → aggiornato → archiviato |  Entity |
+| **Riferimenti esterni** | Altri oggetti lo puntano tramite ID |  Entity |
 
 #### Esempi Tipici
 - Order, Customer, Product, Shipment, Invoice, Ticket, Reservation
@@ -164,10 +164,10 @@ Oggetto definito dai suoi **valori**. Non ha identità propria; se due VO hanno 
 
 | Criterio | Domanda | Se SÌ → Value Object |
 |----------|---------|---------------------|
-| **Solo valore** | Conta solo il valore, non "quale" istanza? | ✓ VO |
-| **Immutabilità** | È naturalmente immutabile o trattabile come tale? | ✓ VO |
-| **Sostituibilità** | Posso sostituirlo con uno equivalente senza cambiare significato? | ✓ VO |
-| **Regole locali** | Aiuta a esprimere regole di validazione locali? | ✓ VO |
+| **Solo valore** | Conta solo il valore, non "quale" istanza |  VO |
+| **Immutabilità** | È naturalmente immutabile o trattabile come tale |  VO |
+| **Sostituibilità** | Posso sostituirlo con uno equivalente senza cambiare significato |  VO |
+| **Regole locali** | Aiuta a esprimere regole di validazione locali |  VO |
 
 #### Esempi Tipici
 - Money (amount + currency), Address, TimeWindow, GeoPoint, DateRange, Email, PhoneNumber
@@ -393,40 +393,40 @@ Ogni consumer deve poter interpretare l'evento **senza assumere dettagli interni
 
 Per ogni dominio identificato, verificare:
 
-- [ ] La classificazione (Core/Supporting/Generic) è giustificata dai criteri?
-- [ ] Il Core Domain è davvero differenziante?
-- [ ] I Supporting Domain supportano effettivamente il Core?
-- [ ] I Generic Domain sono davvero commoditizzabili?
+- [ ] La classificazione (Core/Supporting/Generic) è giustificata dai criteri
+- [ ] Il Core Domain è davvero differenziante
+- [ ] I Supporting Domain supportano effettivamente il Core
+- [ ] I Generic Domain sono davvero commoditizzabili
 
 ### 6.2 Checklist Bounded Context
 
-- [ ] Ogni BC ha un glossario/Ubiquitous Language definito?
-- [ ] I confini sono allineati con ownership e team?
-- [ ] Lo stesso termine ha lo stesso significato dentro il BC?
-- [ ] Le integrazioni tra BC sono esplicite (ACL, Published Language)?
+- [ ] Ogni BC ha un glossario/Ubiquitous Language definito
+- [ ] I confini sono allineati con ownership e team
+- [ ] Lo stesso termine ha lo stesso significato dentro il BC
+- [ ] Le integrazioni tra BC sono esplicite (ACL, Published Language)
 
 ### 6.3 Checklist Entity vs Value Object
 
-- [ ] Le Entity hanno un ID e un ciclo di vita?
-- [ ] I Value Object sono immutabili?
-- [ ] Non ci sono Entity che dovrebbero essere VO (es. Address)?
-- [ ] Non ci sono VO che dovrebbero essere Entity?
+- [ ] Le Entity hanno un ID e un ciclo di vita
+- [ ] I Value Object sono immutabili
+- [ ] Non ci sono Entity che dovrebbero essere VO (es. Address)
+- [ ] Non ci sono VO che dovrebbero essere Entity
 
 ### 6.4 Checklist Coerenza tra Domini
 
-- [ ] Ogni Entity ha UN SOLO owner (fonte di verità)?
-- [ ] Non ci sono Entity duplicate in più domini?
-- [ ] I requisiti di domini diversi non si contraddicono?
-- [ ] Ogni evento ha UN SOLO emettitore?
-- [ ] I pattern di comunicazione sono compatibili?
+- [ ] Ogni Entity ha UN SOLO owner (fonte di verità)
+- [ ] Non ci sono Entity duplicate in più domini
+- [ ] I requisiti di domini diversi non si contraddicono
+- [ ] Ogni evento ha UN SOLO emettitore
+- [ ] I pattern di comunicazione sono compatibili
 
 ### 6.5 Checklist Event-Driven Architecture
 
-- [ ] Gli eventi sono nominati in passato (Past Tense)?
-- [ ] Gli eventi usano il linguaggio del dominio?
-- [ ] Ogni evento ha: eventId, occurredAt, producer, schemaVersion?
-- [ ] Gli eventi hanno un solo emettitore?
-- [ ] I consumer possono gestire duplicati e out-of-order?
+- [ ] Gli eventi sono nominati in passato (Past Tense)
+- [ ] Gli eventi usano il linguaggio del dominio
+- [ ] Ogni evento ha: eventId, occurredAt, producer, schemaVersion
+- [ ] Gli eventi hanno un solo emettitore
+- [ ] I consumer possono gestire duplicati e out-of-order
 
 ---
 
@@ -441,7 +441,7 @@ Per ogni dominio identificato, verificare:
 **Esempio**:
 - `Product` definito in Order Management con attributi di prezzo
 - `Product` definito in Inventory con attributi di stock
-- PROBLEMA: Chi è l'owner? Quale è la fonte di verità?
+- PROBLEMA: Chi è l'owner Quale è la fonte di verità
 
 **Risoluzione Suggerita**: Separare in `OrderLineItem` (Orders) e `InventoryItem` (Inventory), collegati tramite `productId`.
 
@@ -469,7 +469,7 @@ Per ogni dominio identificato, verificare:
 **Severità**: MEDIUM
 
 **Esempio**:
-- Entità `Transaction` senza specifica: è un pagamento? Un movimento di magazzino? Un'operazione contabile?
+- Entità `Transaction` senza specifica: è un pagamento Un movimento di magazzino Un'operazione contabile
 
 **Risoluzione Suggerita**: Rinominare con termine specifico (`PaymentTransaction`, `InventoryMovement`) o aggiungere definizione esplicita.
 
@@ -484,7 +484,7 @@ Per ogni dominio identificato, verificare:
 **Esempio**:
 - `OrderCreated` emesso da Order Management
 - `OrderCreated` emesso anche da Legacy System
-- PROBLEMA: Chi è la fonte di verità?
+- PROBLEMA: Chi è la fonte di verità
 
 **Risoluzione Suggerita**: Definire un solo emettitore; l'altro sistema deve consumare l'evento o usare un nome diverso.
 

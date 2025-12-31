@@ -1,308 +1,403 @@
-{
-  "name": "Agent 2 - Loop Completo con Form HTML",
-  "nodes": [
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "agent2-start",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "id": "webhook-start",
-      "name": "START - Webhook Principale",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [240, 400],
-      "webhookId": "agent2-main",
-      "notes": "Riceve il modello iniziale da Agent 1 o risposte dall'utente.\nURL: http://127.0.0.1:5678/webhook/agent2-start"
-    },
-    {
-      "parameters": {
-        "values": {
-          "number": [
-            {
-              "name": "iteration",
-              "value": "={{ $json.body.iteration || 0 }}"
-            },
-            {
-              "name": "max_iterations",
-              "value": 5
-            }
-          ],
-          "string": [
-            {
-              "name": "domain_model",
-              "value": "={{ JSON.stringify($json.body.domain_model || $json.domain_model) }}"
-            },
-            {
-              "name": "session_id",
-              "value": "={{ $json.body.session_id || $now.toISO() }}"
-            },
-            {
-              "name": "previous_answers",
-              "value": "={{ JSON.stringify($json.body.answers || {}) }}"
-            }
-          ],
-          "boolean": [
-            {
-              "name": "use_llm",
-              "value": true
-            },
-            {
-              "name": "apply_auto_fixes",
-              "value": true
-            }
-          ]
-        }
-      },
-      "id": "prepare-data",
-      "name": "Prepara Dati",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.3,
-      "position": [460, 400],
-      "notes": "Estrae e prepara i dati per l'analisi.\nGestisce sia chiamata iniziale che iterazioni successive."
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "number": [
-            {
-              "value1": "={{ $json.iteration }}",
-              "operation": "largerEqual",
-              "value2": "={{ $json.max_iterations }}"
-            }
-          ]
-        }
-      },
-      "id": "check-max-iter",
-      "name": "Max Iterazioni?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [680, 400],
-      "notes": "Check se abbiamo superato il massimo di iterazioni"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://host.docker.internal:8002/analyze",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  \"domain_model\": JSON.parse($json.domain_model),\n  \"use_llm\": $json.use_llm,\n  \"apply_auto_fixes\": $json.apply_auto_fixes,\n  \"previous_answers\": JSON.parse($json.previous_answers)\n}) }}",
-        "options": {
-          "timeout": 120000
-        }
-      },
-      "id": "analyze-api",
-      "name": "ANALIZZA (Iter. {{ $('Prepara Dati').item.json.iteration + 1 }})",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [900, 500],
-      "notes": "Chiama Agent 2 API.\nSe ci sono previous_answers, le include per raffinamento."
-    },
-    {
-      "parameters": {
-        "values": {
-          "string": [
-            {
-              "name": "session_id",
-              "value": "={{ $('Prepara Dati').item.json.session_id }}"
-            },
-            {
-              "name": "domain_model",
-              "value": "={{ $('Prepara Dati').item.json.domain_model }}"
-            },
-            {
-              "name": "status",
-              "value": "={{ $json.status }}"
-            },
-            {
-              "name": "follow_up_questions",
-              "value": "={{ JSON.stringify($json.follow_up_questions || []) }}"
-            },
-            {
-              "name": "refined_model",
-              "value": "={{ JSON.stringify($json.refined_model || {}) }}"
-            },
-            {
-              "name": "summary",
-              "value": "={{ JSON.stringify($json.summary || {}) }}"
-            }
-          ],
-          "number": [
-            {
-              "name": "iteration",
-              "value": "={{ $('Prepara Dati').item.json.iteration }}"
-            },
-            {
-              "name": "max_iterations",
-              "value": "={{ $('Prepara Dati').item.json.max_iterations }}"
-            }
-          ]
-        }
-      },
-      "id": "merge-context",
-      "name": "Combina Risultati con Contesto",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.3,
-      "position": [1120, 500],
-      "notes": "Combina risultati API con contesto sessione"
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "string": [
-            {
-              "value1": "={{ $json.status }}",
-              "operation": "equals",
-              "value2": "VALID"
-            }
-          ]
-        }
-      },
-      "id": "check-valid",
-      "name": "Modello Valido?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [1340, 500],
-      "notes": "Se VALID → Successo\nAltrimenti → Mostra form"
-    },
-    {
-      "parameters": {
-        "respondWith": "html",
-        "responseBody": "=<!DOCTYPE html>\n<html>\n<head>\n  <title>🎉 Modello DDD Perfetto!</title>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <style>\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body {\n      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n      background: linear-gradient(135deg, #10b981 0%, #059669 100%);\n      min-height: 100vh;\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      padding: 20px;\n    }\n    .container {\n      background: white;\n      max-width: 800px;\n      text-align: center;\n      border-radius: 20px;\n      padding: 60px 40px;\n      box-shadow: 0 30px 90px rgba(0,0,0,0.4);\n      animation: fadeIn 0.6s;\n    }\n    @keyframes fadeIn {\n      from { opacity: 0; transform: translateY(30px); }\n      to { opacity: 1; transform: translateY(0); }\n    }\n    .success-icon {\n      font-size: 120px;\n      margin-bottom: 30px;\n      animation: bounce 1s infinite;\n    }\n    @keyframes bounce {\n      0%, 100% { transform: translateY(0); }\n      50% { transform: translateY(-15px); }\n    }\n    h1 {\n      color: #059669;\n      font-size: 42px;\n      margin-bottom: 20px;\n      font-weight: 700;\n    }\n    .stats {\n      background: linear-gradient(135deg, #f0fdf4 0%, #d1fae5 100%);\n      border-radius: 15px;\n      padding: 35px;\n      margin: 40px 0;\n      text-align: left;\n      border: 2px solid #a7f3d0;\n    }\n    .stat-row {\n      display: flex;\n      justify-content: space-between;\n      align-items: center;\n      padding: 15px 0;\n      border-bottom: 1px solid #a7f3d0;\n    }\n    .stat-row:last-child { border-bottom: none; }\n    .stat-label {\n      color: #065f46;\n      font-weight: 600;\n      font-size: 16px;\n      display: flex;\n      align-items: center;\n      gap: 10px;\n    }\n    .stat-value {\n      color: #059669;\n      font-weight: 700;\n      font-size: 18px;\n    }\n    .message {\n      color: #6b7280;\n      line-height: 1.8;\n      margin-bottom: 30px;\n      font-size: 16px;\n    }\n    .btn-container {\n      display: flex;\n      gap: 15px;\n      justify-content: center;\n      flex-wrap: wrap;\n    }\n    .btn {\n      display: inline-block;\n      padding: 15px 35px;\n      border-radius: 10px;\n      text-decoration: none;\n      font-weight: 600;\n      transition: all 0.3s;\n      font-size: 15px;\n    }\n    .btn-primary {\n      background: linear-gradient(135deg, #10b981 0%, #059669 100%);\n      color: white;\n    }\n    .btn-secondary {\n      background: white;\n      color: #059669;\n      border: 2px solid #10b981;\n    }\n    .btn:hover {\n      transform: translateY(-3px);\n      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);\n    }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"success-icon\">🎉</div>\n    <h1>Modello DDD Perfetto!</h1>\n    <p class=\"message\">\n      <strong>Complimenti!</strong> Dopo <strong>{{ $json.iteration + 1 }}</strong> {{ $json.iteration === 0 ? 'iterazione' : 'iterazioni' }} di analisi e raffinamento collaborativo,<br>\n      il tuo modello Domain-Driven Design è ora <strong>completo, validato e coerente</strong>.\n    </p>\n    <div class=\"stats\">\n      <div class=\"stat-row\">\n        <span class=\"stat-label\">📊 Iterazioni completate</span>\n        <span class=\"stat-value\">{{ $json.iteration + 1 }}</span>\n      </div>\n      <div class=\"stat-row\">\n        <span class=\"stat-label\">✅ Problemi risolti</span>\n        <span class=\"stat-value\">Tutti</span>\n      </div>\n      <div class=\"stat-row\">\n        <span class=\"stat-label\">🎯 Status finale</span>\n        <span class=\"stat-value\">VALID</span>\n      </div>\n      <div class=\"stat-row\">\n        <span class=\"stat-label\">⏱️ Timestamp</span>\n        <span class=\"stat-value\">{{ $now.toFormat('dd/MM/yyyy HH:mm:ss') }}</span>\n      </div>\n      <div class=\"stat-row\">\n        <span class=\"stat-label\">🆔 Session ID</span>\n        <span class=\"stat-value\" style=\"font-size: 12px; font-family: monospace;\">{{ $json.session_id }}</span>\n      </div>\n    </div>\n    <p style=\"color: #059669; margin-bottom: 35px; font-size: 15px; font-weight: 600;\">\n      ✨ Il modello raffinato è ora pronto per essere passato ad <strong>Agent 3</strong><br>\n      per la generazione delle specifiche funzionali dettagliate.\n    </p>\n    <div class=\"btn-container\">\n      <a href=\"http://127.0.0.1:5678\" class=\"btn btn-primary\">🏠 Torna a n8n</a>\n      <a href=\"http://localhost:8080\" class=\"btn btn-secondary\">📊 Vedi Kafka UI</a>\n    </div>\n  </div>\n</body>\n</html>",
-        "options": {}
-      },
-      "id": "success-page",
-      "name": "Pagina Successo",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [1560, 380],
-      "notes": "Mostra pagina di successo finale"
-    },
-    {
-      "parameters": {
-        "respondWith": "html",
-        "responseBody": "=<!DOCTYPE html>\n<html>\n<head>\n  <title>⚠️ Troppe Iterazioni</title>\n  <meta charset=\"UTF-8\">\n  <style>\n    body {\n      font-family: Arial;\n      background: #fee2e2;\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      min-height: 100vh;\n      padding: 20px;\n    }\n    .container {\n      background: white;\n      padding: 40px;\n      border-radius: 15px;\n      max-width: 600px;\n      text-align: center;\n      border: 3px solid #ef4444;\n    }\n    h1 { color: #dc2626; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div style=\"font-size: 80px;\">⚠️</div>\n    <h1>Limite Iterazioni Raggiunto</h1>\n    <p>Dopo {{ $('Prepara Dati').item.json.max_iterations }} iterazioni il modello presenta ancora problemi complessi.</p>\n    <p style=\"margin-top: 20px;\"><a href=\"http://127.0.0.1:5678\">Torna a n8n</a></p>\n  </div>\n</body>\n</html>",
-        "options": {}
-      },
-      "id": "max-iter-page",
-      "name": "Limite Iterazioni",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [900, 300],
-      "notes": "Mostra errore se troppe iterazioni"
-    },
-    {
-      "parameters": {
-        "respondWith": "html",
-        "responseBody": "=<!DOCTYPE html>\n<html>\n<head>\n  <title>🤖 Agent 2 - Domande di Validazione</title>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <style>\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body {\n      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n      min-height: 100vh;\n      padding: 20px;\n      display: flex;\n      justify-content: center;\n      align-items: flex-start;\n      padding-top: 40px;\n    }\n    .container {\n      background: white;\n      max-width: 900px;\n      width: 100%;\n      border-radius: 20px;\n      box-shadow: 0 30px 90px rgba(0,0,0,0.4);\n      overflow: hidden;\n      animation: slideIn 0.5s;\n    }\n    @keyframes slideIn {\n      from { opacity: 0; transform: translateY(-30px); }\n      to { opacity: 1; transform: translateY(0); }\n    }\n    .header {\n      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n      color: white;\n      padding: 40px;\n      text-align: center;\n      position: relative;\n    }\n    .header h1 { font-size: 32px; margin-bottom: 10px; font-weight: 700; }\n    .header p { opacity: 0.95; font-size: 15px; }\n    .content { padding: 45px; }\n    .iteration-badge {\n      display: inline-block;\n      background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);\n      color: #78350f;\n      padding: 8px 20px;\n      border-radius: 25px;\n      font-size: 13px;\n      font-weight: 700;\n      margin-bottom: 25px;\n      box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);\n    }\n    .summary {\n      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);\n      border-left: 5px solid #f59e0b;\n      padding: 20px;\n      margin-bottom: 35px;\n      border-radius: 8px;\n      box-shadow: 0 2px 8px rgba(0,0,0,0.05);\n    }\n    .summary h3 {\n      color: #78350f;\n      margin-bottom: 15px;\n      font-size: 18px;\n      display: flex;\n      align-items: center;\n      gap: 8px;\n    }\n    .summary-grid {\n      display: grid;\n      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));\n      gap: 12px;\n      margin-top: 12px;\n    }\n    .summary-item {\n      background: white;\n      padding: 10px 15px;\n      border-radius: 6px;\n      font-size: 14px;\n    }\n    .summary-item strong { color: #92400e; }\n    .question-block {\n      background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);\n      border: 2px solid #e5e7eb;\n      border-radius: 12px;\n      padding: 30px;\n      margin-bottom: 30px;\n      transition: all 0.3s;\n      position: relative;\n    }\n    .question-block:hover {\n      border-color: #667eea;\n      box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);\n      transform: translateY(-2px);\n    }\n    .question-number {\n      position: absolute;\n      top: -15px;\n      left: 20px;\n      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n      color: white;\n      width: 40px;\n      height: 40px;\n      border-radius: 50%;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      font-weight: 700;\n      font-size: 16px;\n      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);\n    }\n    .question-label {\n      font-weight: 600;\n      color: #1f2937;\n      margin-bottom: 18px;\n      margin-top: 10px;\n      font-size: 17px;\n      line-height: 1.5;\n    }\n    .severity-badge {\n      display: inline-block;\n      padding: 4px 12px;\n      border-radius: 15px;\n      font-size: 11px;\n      margin-left: 10px;\n      font-weight: 700;\n      vertical-align: middle;\n    }\n    .severity-CRITICAL { background: #fee2e2; color: #991b1b; }\n    .severity-HIGH { background: #fed7aa; color: #9a3412; }\n    .severity-MEDIUM { background: #fef3c7; color: #78350f; }\n    .severity-LOW { background: #dbeafe; color: #1e40af; }\n    textarea {\n      width: 100%;\n      padding: 16px;\n      border: 2px solid #d1d5db;\n      border-radius: 10px;\n      font-size: 15px;\n      font-family: inherit;\n      resize: vertical;\n      min-height: 120px;\n      transition: all 0.3s;\n      line-height: 1.6;\n    }\n    textarea:focus {\n      outline: none;\n      border-color: #667eea;\n      box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);\n    }\n    .suggested-answers {\n      margin-top: 15px;\n      padding: 15px;\n      background: white;\n      border-radius: 8px;\n      font-size: 13px;\n      color: #6b7280;\n      border: 1px solid #e5e7eb;\n    }\n    .suggested-answers strong { color: #374151; display: block; margin-bottom: 8px; }\n    .suggested-answers ul { padding-left: 25px; }\n    .suggested-answers li { margin-bottom: 5px; line-height: 1.5; }\n    button {\n      width: 100%;\n      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n      color: white;\n      border: none;\n      padding: 20px;\n      border-radius: 12px;\n      font-size: 17px;\n      font-weight: 700;\n      cursor: pointer;\n      transition: all 0.3s;\n      margin-top: 30px;\n      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);\n    }\n    button:hover {\n      transform: translateY(-3px);\n      box-shadow: 0 12px 30px rgba(102, 126, 234, 0.4);\n    }\n    button:active { transform: translateY(-1px); }\n    .footer {\n      text-align: center;\n      padding: 25px;\n      color: #9ca3af;\n      font-size: 13px;\n      border-top: 1px solid #e5e7eb;\n      background: #f9fafb;\n    }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>🤖 Agent 2 - Validazione DDD</h1>\n      <p>Rispond alle domande per raffinare collaborativamente il modello</p>\n    </div>\n    <div class=\"content\">\n      <div class=\"iteration-badge\">\n        ⚡ Iterazione {{ $json.iteration + 1 }} di {{ $json.max_iterations }}\n      </div>\n      \n      <div class=\"summary\">\n        <h3>📊 Riepilogo Problemi Rilevati</h3>\n        <div class=\"summary-grid\">\n          <div class=\"summary-item\">\n            <strong>{{ JSON.parse($json.summary).total_issues || 0 }}</strong> Problemi totali\n          </div>\n          <div class=\"summary-item\">\n            <strong>{{ JSON.parse($json.summary).entity_overlaps || 0 }}</strong> Entity overlaps\n          </div>\n          <div class=\"summary-item\">\n            <strong>{{ JSON.parse($json.summary).requirement_conflicts || 0 }}</strong> Conflitti requisiti\n          </div>\n          <div class=\"summary-item\">\n            <strong>{{ JSON.parse($json.summary).event_architecture_violations || 0 }}</strong> Violazioni eventi\n          </div>\n        </div>\n      </div>\n\n      <form id=\"answersForm\">\n        <input type=\"hidden\" name=\"session_id\" value=\"{{ $json.session_id }}\">\n        <input type=\"hidden\" name=\"iteration\" value=\"{{ $json.iteration + 1 }}\">\n        <input type=\"hidden\" name=\"domain_model\" value='{{ $json.refined_model || $json.domain_model }}'>\n        <input type=\"hidden\" name=\"max_iterations\" value=\"{{ $json.max_iterations }}\">\n        \n        {{ JSON.parse($json.follow_up_questions).map((q, i) => `\n          <div class=\"question-block\">\n            <div class=\"question-number\">${i + 1}</div>\n            <div class=\"question-label\">\n              ${q.question}\n              <span class=\"severity-badge severity-${q.severity || 'MEDIUM'}\">${q.severity || 'MEDIUM'}</span>\n            </div>\n            <textarea \n              name=\"q${i}\" \n              id=\"answer_${i}\" \n              placeholder=\"Inserisci la tua risposta dettagliata...\"\n              required\n            ></textarea>\n            ${q.suggested_answers && q.suggested_answers.length > 0 ? `\n              <div class=\"suggested-answers\">\n                <strong>💡 Suggerimenti di risposta:</strong>\n                <ul>\n                  ${q.suggested_answers.map(s => `<li>${s}</li>`).join('')}\n                </ul>\n              </div>\n            ` : ''}\n          </div>\n        `).join('') }}\n\n        <button type=\"submit\">✅ Invia Risposte e Continua Raffinamento</button>\n      </form>\n    </div>\n    <div class=\"footer\">\n      🤖 Agent 2 - Consistency & Conflict Analyzer | Powered by n8n + Ollama + Llama3\n    </div>\n  </div>\n\n  <script>\n    document.getElementById('answersForm').addEventListener('submit', async function(e) {\n      e.preventDefault();\n      const formData = new FormData(this);\n      const data = {\n        session_id: formData.get('session_id'),\n        iteration: parseInt(formData.get('iteration')),\n        max_iterations: parseInt(formData.get('max_iterations')),\n        domain_model: JSON.parse(formData.get('domain_model')),\n        answers: {}\n      };\n      \n      // Raccogli risposte\n      for (let [key, value] of formData.entries()) {\n        if (key.startsWith('q')) {\n          data.answers[key] = value;\n        }\n      }\n      \n      // Mostra loading\n      const btn = document.querySelector('button');\n      btn.innerHTML = '⏳ Elaborazione risposte e rianalisi in corso...';\n      btn.disabled = true;\n      document.querySelectorAll('textarea').forEach(t => t.disabled = true);\n      \n      try {\n        // Richiama lo stesso webhook con le risposte\n        const response = await fetch('http://127.0.0.1:5678/webhook/agent2-start', {\n          method: 'POST',\n          headers: { 'Content-Type': 'application/json' },\n          body: JSON.stringify(data)\n        });\n        \n        if (response.ok) {\n          // Sostituisci la pagina con la risposta\n          document.body.innerHTML = await response.text();\n        } else {\n          throw new Error('Errore nella richiesta');\n        }\n      } catch (error) {\n        alert('Errore nell\\'invio. Riprova.');\n        btn.innerHTML = '✅ Invia Risposte e Continua Raffinamento';\n        btn.disabled = false;\n        document.querySelectorAll('textarea').forEach(t => t.disabled = false);\n      }\n    });\n  </script>\n</body>\n</html>",
-        "options": {}
-      },
-      "id": "questions-form",
-      "name": "Form Domande HTML",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [1560, 620],
-      "notes": "Mostra form HTML con domande.\nQuando l'utente invia, richiama lo stesso webhook con le risposte."
-    }
-  ],
-  "connections": {
-    "webhook-start": {
-      "main": [
-        [
-          {
-            "node": "prepare-data",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "prepare-data": {
-      "main": [
-        [
-          {
-            "node": "check-max-iter",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "check-max-iter": {
-      "main": [
-        [
-          {
-            "node": "max-iter-page",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "analyze-api",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "analyze-api": {
-      "main": [
-        [
-          {
-            "node": "merge-context",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "merge-context": {
-      "main": [
-        [
-          {
-            "node": "check-valid",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "check-valid": {
-      "main": [
-        [
-          {
-            "node": "success-page",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "questions-form",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
-  },
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "staticData": null,
-  "tags": [],
-  "triggerCount": 1,
-  "updatedAt": "2025-12-18T17:00:00.000Z",
-  "versionId": "1"
+﻿{
+    "name":  "Agent 2 - Loop Completo con Form HTML",
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "agent2-start",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "webhook-start",
+                      "name":  "START - Webhook Principale",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2,
+                      "position":  [
+                                       240,
+                                       400
+                                   ],
+                      "webhookId":  "agent2-main",
+                      "notes":  "Riceve il modello iniziale da Agent 1 o risposte dall\u0027utente.\nURL: http://127.0.0.1:5678/webhook/agent2-start"
+                  },
+                  {
+                      "parameters":  {
+                                         "values":  {
+                                                        "number":  [
+                                                                       {
+                                                                           "name":  "iteration",
+                                                                           "value":  "={{ $json.body.iteration || 0 }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "max_iterations",
+                                                                           "value":  5
+                                                                       }
+                                                                   ],
+                                                        "string":  [
+                                                                       {
+                                                                           "name":  "domain_model",
+                                                                           "value":  "={{ JSON.stringify($json.body.domain_model || $json.domain_model) }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "session_id",
+                                                                           "value":  "={{ $json.body.session_id || $now.toISO() }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "previous_answers",
+                                                                           "value":  "={{ JSON.stringify($json.body.answers || {}) }}"
+                                                                       }
+                                                                   ],
+                                                        "boolean":  [
+                                                                        {
+                                                                            "name":  "use_llm",
+                                                                            "value":  true
+                                                                        },
+                                                                        {
+                                                                            "name":  "apply_auto_fixes",
+                                                                            "value":  true
+                                                                        }
+                                                                    ]
+                                                    }
+                                     },
+                      "id":  "prepare-data",
+                      "name":  "Prepara Dati",
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.3,
+                      "position":  [
+                                       460,
+                                       400
+                                   ],
+                      "notes":  "Estrae e prepara i dati per l\u0027analisi.\nGestisce sia chiamata iniziale che iterazioni successive."
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "number":  [
+                                                                           {
+                                                                               "value1":  "={{ $json.iteration }}",
+                                                                               "operation":  "largerEqual",
+                                                                               "value2":  "={{ $json.max_iterations }}"
+                                                                           }
+                                                                       ]
+                                                        }
+                                     },
+                      "id":  "check-max-iter",
+                      "name":  "Max Iterazioni?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2,
+                      "position":  [
+                                       680,
+                                       400
+                                   ],
+                      "notes":  "Check se abbiamo superato il massimo di iterazioni"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.AGENT2_API_URL || 'http://host.docker.internal:8002' }}/analyze",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{ JSON.stringify({\n  \"domain_model\": JSON.parse($json.domain_model),\n  \"use_llm\": $json.use_llm,\n  \"apply_auto_fixes\": $json.apply_auto_fixes,\n  \"previous_answers\": JSON.parse($json.previous_answers)\n}) }}",
+                                         "options":  {
+                                                         "timeout":  120000
+                                                     }
+                                     },
+                      "id":  "analyze-api",
+                      "name":  "ANALIZZA (Iter. {{ $(\u0027Prepara Dati\u0027).item.json.iteration + 1 }})",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       900,
+                                       500
+                                   ],
+                      "notes":  "Chiama Agent 2 API.\nSe ci sono previous_answers, le include per raffinamento."
+                  },
+                  {
+                      "parameters":  {
+                                         "values":  {
+                                                        "string":  [
+                                                                       {
+                                                                           "name":  "session_id",
+                                                                           "value":  "={{ $(\u0027Prepara Dati\u0027).item.json.session_id }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "domain_model",
+                                                                           "value":  "={{ $(\u0027Prepara Dati\u0027).item.json.domain_model }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "status",
+                                                                           "value":  "={{ $json.status }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "follow_up_questions",
+                                                                           "value":  "={{ JSON.stringify($json.follow_up_questions || []) }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "refined_model",
+                                                                           "value":  "={{ JSON.stringify($json.refined_model || {}) }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "summary",
+                                                                           "value":  "={{ JSON.stringify($json.summary || {}) }}"
+                                                                       }
+                                                                   ],
+                                                        "number":  [
+                                                                       {
+                                                                           "name":  "iteration",
+                                                                           "value":  "={{ $(\u0027Prepara Dati\u0027).item.json.iteration }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "max_iterations",
+                                                                           "value":  "={{ $(\u0027Prepara Dati\u0027).item.json.max_iterations }}"
+                                                                       }
+                                                                   ]
+                                                    }
+                                     },
+                      "id":  "merge-context",
+                      "name":  "Combina Risultati con Contesto",
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.3,
+                      "position":  [
+                                       1120,
+                                       500
+                                   ],
+                      "notes":  "Combina risultati API con contesto sessione"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "string":  [
+                                                                           {
+                                                                               "value1":  "={{ $json.status }}",
+                                                                               "operation":  "equals",
+                                                                               "value2":  "VALID"
+                                                                           }
+                                                                       ]
+                                                        }
+                                     },
+                      "id":  "check-valid",
+                      "name":  "Modello Valido?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1340,
+                                       500
+                                   ],
+                      "notes":  "Se VALID â†’ Successo\nAltrimenti â†’ Mostra form"
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "html",
+                                         "responseBody":  "=\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003ctitle\u003e Modello DDD Perfetto!\u003c/title\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003cstyle\u003e\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body {\n      font-family: \u0027Segoe UI\u0027, Tahoma, Geneva, Verdana, sans-serif;\n      background: linear-gradient(135deg, #10b981 0%, #059669 100%);\n      min-height: 100vh;\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      padding: 20px;\n    }\n    .container {\n      background: white;\n      max-width: 800px;\n      text-align: center;\n      border-radius: 20px;\n      padding: 60px 40px;\n      box-shadow: 0 30px 90px rgba(0,0,0,0.4);\n      animation: fadeIn 0.6s;\n    }\n    @keyframes fadeIn {\n      from { opacity: 0; transform: translateY(30px); }\n      to { opacity: 1; transform: translateY(0); }\n    }\n    .success-icon {\n      font-size: 120px;\n      margin-bottom: 30px;\n      animation: bounce 1s infinite;\n    }\n    @keyframes bounce {\n      0%, 100% { transform: translateY(0); }\n      50% { transform: translateY(-15px); }\n    }\n    h1 {\n      color: #059669;\n      font-size: 42px;\n      margin-bottom: 20px;\n      font-weight: 700;\n    }\n    .stats {\n      background: linear-gradient(135deg, #f0fdf4 0%, #d1fae5 100%);\n      border-radius: 15px;\n      padding: 35px;\n      margin: 40px 0;\n      text-align: left;\n      border: 2px solid #a7f3d0;\n    }\n    .stat-row {\n      display: flex;\n      justify-content: space-between;\n      align-items: center;\n      padding: 15px 0;\n      border-bottom: 1px solid #a7f3d0;\n    }\n    .stat-row:last-child { border-bottom: none; }\n    .stat-label {\n      color: #065f46;\n      font-weight: 600;\n      font-size: 16px;\n      display: flex;\n      align-items: center;\n      gap: 10px;\n    }\n    .stat-value {\n      color: #059669;\n      font-weight: 700;\n      font-size: 18px;\n    }\n    .message {\n      color: #6b7280;\n      line-height: 1.8;\n      margin-bottom: 30px;\n      font-size: 16px;\n    }\n    .btn-container {\n      display: flex;\n      gap: 15px;\n      justify-content: center;\n      flex-wrap: wrap;\n    }\n    .btn {\n      display: inline-block;\n      padding: 15px 35px;\n      border-radius: 10px;\n      text-decoration: none;\n      font-weight: 600;\n      transition: all 0.3s;\n      font-size: 15px;\n    }\n    .btn-primary {\n      background: linear-gradient(135deg, #10b981 0%, #059669 100%);\n      color: white;\n    }\n    .btn-secondary {\n      background: white;\n      color: #059669;\n      border: 2px solid #10b981;\n    }\n    .btn:hover {\n      transform: translateY(-3px);\n      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);\n    }\n  \u003c/style\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n  \u003cdiv class=\"container\"\u003e\n    \u003cdiv class=\"success-icon\"\u003e\u003c/div\u003e\n    \u003ch1\u003eModello DDD Perfetto!\u003c/h1\u003e\n    \u003cp class=\"message\"\u003e\n      \u003cstrong\u003eComplimenti!\u003c/strong\u003e Dopo \u003cstrong\u003e{{ $json.iteration + 1 }}\u003c/strong\u003e {{ $json.iteration === 0 ? \u0027iterazione\u0027 : \u0027iterazioni\u0027 }} di analisi e raffinamento collaborativo,\u003cbr\u003e\n      il tuo modello Domain-Driven Design Ã¨ ora \u003cstrong\u003ecompleto, validato e coerente\u003c/strong\u003e.\n    \u003c/p\u003e\n    \u003cdiv class=\"stats\"\u003e\n      \u003cdiv class=\"stat-row\"\u003e\n        \u003cspan class=\"stat-label\"\u003e Iterazioni completate\u003c/span\u003e\n        \u003cspan class=\"stat-value\"\u003e{{ $json.iteration + 1 }}\u003c/span\u003e\n      \u003c/div\u003e\n      \u003cdiv class=\"stat-row\"\u003e\n        \u003cspan class=\"stat-label\"\u003e Problemi risolti\u003c/span\u003e\n        \u003cspan class=\"stat-value\"\u003eTutti\u003c/span\u003e\n      \u003c/div\u003e\n      \u003cdiv class=\"stat-row\"\u003e\n        \u003cspan class=\"stat-label\"\u003e Status finale\u003c/span\u003e\n        \u003cspan class=\"stat-value\"\u003eVALID\u003c/span\u003e\n      \u003c/div\u003e\n      \u003cdiv class=\"stat-row\"\u003e\n        \u003cspan class=\"stat-label\"\u003eâ± Timestamp\u003c/span\u003e\n        \u003cspan class=\"stat-value\"\u003e{{ $now.toFormat(\u0027dd/MM/yyyy HH:mm:ss\u0027) }}\u003c/span\u003e\n      \u003c/div\u003e\n      \u003cdiv class=\"stat-row\"\u003e\n        \u003cspan class=\"stat-label\"\u003eðŸ†” Session ID\u003c/span\u003e\n        \u003cspan class=\"stat-value\" style=\"font-size: 12px; font-family: monospace;\"\u003e{{ $json.session_id }}\u003c/span\u003e\n      \u003c/div\u003e\n    \u003c/div\u003e\n    \u003cp style=\"color: #059669; margin-bottom: 35px; font-size: 15px; font-weight: 600;\"\u003e\n       Il modello raffinato Ã¨ ora pronto per essere passato ad \u003cstrong\u003eAgent 3\u003c/strong\u003e\u003cbr\u003e\n      per la generazione delle specifiche funzionali dettagliate.\n    \u003c/p\u003e\n    \u003cdiv class=\"btn-container\"\u003e\n      \u003ca href=\"http://127.0.0.1:5678\" class=\"btn btn-primary\"\u003e Torna a n8n\u003c/a\u003e\n      \u003ca href=\"http://localhost:8080\" class=\"btn btn-secondary\"\u003e Vedi Kafka UI\u003c/a\u003e\n    \u003c/div\u003e\n  \u003c/div\u003e\n\u003c/body\u003e\n\u003c/html\u003e",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "success-page",
+                      "name":  "Pagina Successo",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       1560,
+                                       380
+                                   ],
+                      "notes":  "Mostra pagina di successo finale"
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "html",
+                                         "responseBody":  "=\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003ctitle\u003e Troppe Iterazioni\u003c/title\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cstyle\u003e\n    body {\n      font-family: Arial;\n      background: #fee2e2;\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      min-height: 100vh;\n      padding: 20px;\n    }\n    .container {\n      background: white;\n      padding: 40px;\n      border-radius: 15px;\n      max-width: 600px;\n      text-align: center;\n      border: 3px solid #ef4444;\n    }\n    h1 { color: #dc2626; }\n  \u003c/style\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n  \u003cdiv class=\"container\"\u003e\n    \u003cdiv style=\"font-size: 80px;\"\u003e\u003c/div\u003e\n    \u003ch1\u003eLimite Iterazioni Raggiunto\u003c/h1\u003e\n    \u003cp\u003eDopo {{ $(\u0027Prepara Dati\u0027).item.json.max_iterations }} iterazioni il modello presenta ancora problemi complessi.\u003c/p\u003e\n    \u003cp style=\"margin-top: 20px;\"\u003e\u003ca href=\"http://127.0.0.1:5678\"\u003eTorna a n8n\u003c/a\u003e\u003c/p\u003e\n  \u003c/div\u003e\n\u003c/body\u003e\n\u003c/html\u003e",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "max-iter-page",
+                      "name":  "Limite Iterazioni",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       900,
+                                       300
+                                   ],
+                      "notes":  "Mostra errore se troppe iterazioni"
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "html",
+                                         "responseBody":  "=\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003ctitle\u003e Agent 2 - Domande di Validazione\u003c/title\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003cstyle\u003e\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body {\n      font-family: \u0027Segoe UI\u0027, Tahoma, Geneva, Verdana, sans-serif;\n      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n      min-height: 100vh;\n      padding: 20px;\n      display: flex;\n      justify-content: center;\n      align-items: flex-start;\n      padding-top: 40px;\n    }\n    .container {\n      background: white;\n      max-width: 900px;\n      width: 100%;\n      border-radius: 20px;\n      box-shadow: 0 30px 90px rgba(0,0,0,0.4);\n      overflow: hidden;\n      animation: slideIn 0.5s;\n    }\n    @keyframes slideIn {\n      from { opacity: 0; transform: translateY(-30px); }\n      to { opacity: 1; transform: translateY(0); }\n    }\n    .header {\n      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n      color: white;\n      padding: 40px;\n      text-align: center;\n      position: relative;\n    }\n    .header h1 { font-size: 32px; margin-bottom: 10px; font-weight: 700; }\n    .header p { opacity: 0.95; font-size: 15px; }\n    .content { padding: 45px; }\n    .iteration-badge {\n      display: inline-block;\n      background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);\n      color: #78350f;\n      padding: 8px 20px;\n      border-radius: 25px;\n      font-size: 13px;\n      font-weight: 700;\n      margin-bottom: 25px;\n      box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);\n    }\n    .summary {\n      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);\n      border-left: 5px solid #f59e0b;\n      padding: 20px;\n      margin-bottom: 35px;\n      border-radius: 8px;\n      box-shadow: 0 2px 8px rgba(0,0,0,0.05);\n    }\n    .summary h3 {\n      color: #78350f;\n      margin-bottom: 15px;\n      font-size: 18px;\n      display: flex;\n      align-items: center;\n      gap: 8px;\n    }\n    .summary-grid {\n      display: grid;\n      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));\n      gap: 12px;\n      margin-top: 12px;\n    }\n    .summary-item {\n      background: white;\n      padding: 10px 15px;\n      border-radius: 6px;\n      font-size: 14px;\n    }\n    .summary-item strong { color: #92400e; }\n    .question-block {\n      background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);\n      border: 2px solid #e5e7eb;\n      border-radius: 12px;\n      padding: 30px;\n      margin-bottom: 30px;\n      transition: all 0.3s;\n      position: relative;\n    }\n    .question-block:hover {\n      border-color: #667eea;\n      box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);\n      transform: translateY(-2px);\n    }\n    .question-number {\n      position: absolute;\n      top: -15px;\n      left: 20px;\n      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n      color: white;\n      width: 40px;\n      height: 40px;\n      border-radius: 50%;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      font-weight: 700;\n      font-size: 16px;\n      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);\n    }\n    .question-label {\n      font-weight: 600;\n      color: #1f2937;\n      margin-bottom: 18px;\n      margin-top: 10px;\n      font-size: 17px;\n      line-height: 1.5;\n    }\n    .severity-badge {\n      display: inline-block;\n      padding: 4px 12px;\n      border-radius: 15px;\n      font-size: 11px;\n      margin-left: 10px;\n      font-weight: 700;\n      vertical-align: middle;\n    }\n    .severity-CRITICAL { background: #fee2e2; color: #991b1b; }\n    .severity-HIGH { background: #fed7aa; color: #9a3412; }\n    .severity-MEDIUM { background: #fef3c7; color: #78350f; }\n    .severity-LOW { background: #dbeafe; color: #1e40af; }\n    textarea {\n      width: 100%;\n      padding: 16px;\n      border: 2px solid #d1d5db;\n      border-radius: 10px;\n      font-size: 15px;\n      font-family: inherit;\n      resize: vertical;\n      min-height: 120px;\n      transition: all 0.3s;\n      line-height: 1.6;\n    }\n    textarea:focus {\n      outline: none;\n      border-color: #667eea;\n      box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);\n    }\n    .suggested-answers {\n      margin-top: 15px;\n      padding: 15px;\n      background: white;\n      border-radius: 8px;\n      font-size: 13px;\n      color: #6b7280;\n      border: 1px solid #e5e7eb;\n    }\n    .suggested-answers strong { color: #374151; display: block; margin-bottom: 8px; }\n    .suggested-answers ul { padding-left: 25px; }\n    .suggested-answers li { margin-bottom: 5px; line-height: 1.5; }\n    button {\n      width: 100%;\n      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n      color: white;\n      border: none;\n      padding: 20px;\n      border-radius: 12px;\n      font-size: 17px;\n      font-weight: 700;\n      cursor: pointer;\n      transition: all 0.3s;\n      margin-top: 30px;\n      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);\n    }\n    button:hover {\n      transform: translateY(-3px);\n      box-shadow: 0 12px 30px rgba(102, 126, 234, 0.4);\n    }\n    button:active { transform: translateY(-1px); }\n    .footer {\n      text-align: center;\n      padding: 25px;\n      color: #9ca3af;\n      font-size: 13px;\n      border-top: 1px solid #e5e7eb;\n      background: #f9fafb;\n    }\n  \u003c/style\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n  \u003cdiv class=\"container\"\u003e\n    \u003cdiv class=\"header\"\u003e\n      \u003ch1\u003e Agent 2 - Validazione DDD\u003c/h1\u003e\n      \u003cp\u003eRispond alle domande per raffinare collaborativamente il modello\u003c/p\u003e\n    \u003c/div\u003e\n    \u003cdiv class=\"content\"\u003e\n      \u003cdiv class=\"iteration-badge\"\u003e\n         Iterazione {{ $json.iteration + 1 }} di {{ $json.max_iterations }}\n      \u003c/div\u003e\n      \n      \u003cdiv class=\"summary\"\u003e\n        \u003ch3\u003e Riepilogo Problemi Rilevati\u003c/h3\u003e\n        \u003cdiv class=\"summary-grid\"\u003e\n          \u003cdiv class=\"summary-item\"\u003e\n            \u003cstrong\u003e{{ JSON.parse($json.summary).total_issues || 0 }}\u003c/strong\u003e Problemi totali\n          \u003c/div\u003e\n          \u003cdiv class=\"summary-item\"\u003e\n            \u003cstrong\u003e{{ JSON.parse($json.summary).entity_overlaps || 0 }}\u003c/strong\u003e Entity overlaps\n          \u003c/div\u003e\n          \u003cdiv class=\"summary-item\"\u003e\n            \u003cstrong\u003e{{ JSON.parse($json.summary).requirement_conflicts || 0 }}\u003c/strong\u003e Conflitti requisiti\n          \u003c/div\u003e\n          \u003cdiv class=\"summary-item\"\u003e\n            \u003cstrong\u003e{{ JSON.parse($json.summary).event_architecture_violations || 0 }}\u003c/strong\u003e Violazioni eventi\n          \u003c/div\u003e\n        \u003c/div\u003e\n      \u003c/div\u003e\n\n      \u003cform id=\"answersForm\"\u003e\n        \u003cinput type=\"hidden\" name=\"session_id\" value=\"{{ $json.session_id }}\"\u003e\n        \u003cinput type=\"hidden\" name=\"iteration\" value=\"{{ $json.iteration + 1 }}\"\u003e\n        \u003cinput type=\"hidden\" name=\"domain_model\" value=\u0027{{ $json.refined_model || $json.domain_model }}\u0027\u003e\n        \u003cinput type=\"hidden\" name=\"max_iterations\" value=\"{{ $json.max_iterations }}\"\u003e\n        \n        {{ JSON.parse($json.follow_up_questions).map((q, i) =\u003e `\n          \u003cdiv class=\"question-block\"\u003e\n            \u003cdiv class=\"question-number\"\u003e${i + 1}\u003c/div\u003e\n            \u003cdiv class=\"question-label\"\u003e\n              ${q.question}\n              \u003cspan class=\"severity-badge severity-${q.severity || \u0027MEDIUM\u0027}\"\u003e${q.severity || \u0027MEDIUM\u0027}\u003c/span\u003e\n            \u003c/div\u003e\n            \u003ctextarea \n              name=\"q${i}\" \n              id=\"answer_${i}\" \n              placeholder=\"Inserisci la tua risposta dettagliata...\"\n              required\n            \u003e\u003c/textarea\u003e\n            ${q.suggested_answers \u0026\u0026 q.suggested_answers.length \u003e 0 ? `\n              \u003cdiv class=\"suggested-answers\"\u003e\n                \u003cstrong\u003e Suggerimenti di risposta:\u003c/strong\u003e\n                \u003cul\u003e\n                  ${q.suggested_answers.map(s =\u003e `\u003cli\u003e${s}\u003c/li\u003e`).join(\u0027\u0027)}\n                \u003c/ul\u003e\n              \u003c/div\u003e\n            ` : \u0027\u0027}\n          \u003c/div\u003e\n        `).join(\u0027\u0027) }}\n\n        \u003cbutton type=\"submit\"\u003e Invia Risposte e Continua Raffinamento\u003c/button\u003e\n      \u003c/form\u003e\n    \u003c/div\u003e\n    \u003cdiv class=\"footer\"\u003e\n       Agent 2 - Consistency \u0026 Conflict Analyzer | Powered by n8n + Ollama + Llama3\n    \u003c/div\u003e\n  \u003c/div\u003e\n\n  \u003cscript\u003e\n    document.getElementById(\u0027answersForm\u0027).addEventListener(\u0027submit\u0027, async function(e) {\n      e.preventDefault();\n      const formData = new FormData(this);\n      const data = {\n        session_id: formData.get(\u0027session_id\u0027),\n        iteration: parseInt(formData.get(\u0027iteration\u0027)),\n        max_iterations: parseInt(formData.get(\u0027max_iterations\u0027)),\n        domain_model: JSON.parse(formData.get(\u0027domain_model\u0027)),\n        answers: {}\n      };\n      \n      // Raccogli risposte\n      for (let [key, value] of formData.entries()) {\n        if (key.startsWith(\u0027q\u0027)) {\n          data.answers[key] = value;\n        }\n      }\n      \n      // Mostra loading\n      const btn = document.querySelector(\u0027button\u0027);\n      btn.innerHTML = \u0027â³ Elaborazione risposte e rianalisi in corso...\u0027;\n      btn.disabled = true;\n      document.querySelectorAll(\u0027textarea\u0027).forEach(t =\u003e t.disabled = true);\n      \n      try {\n        // Richiama lo stesso webhook con le risposte\n        const response = await fetch(\u0027http://127.0.0.1:5678/webhook/agent2-start\u0027, {\n          method: \u0027POST\u0027,\n          headers: { \u0027Content-Type\u0027: \u0027application/json\u0027 },\n          body: JSON.stringify(data)\n        });\n        \n        if (response.ok) {\n          // Sostituisci la pagina con la risposta\n          document.body.innerHTML = await response.text();\n        } else {\n          throw new Error(\u0027Errore nella richiesta\u0027);\n        }\n      } catch (error) {\n        alert(\u0027Errore nell\\\u0027invio. Riprova.\u0027);\n        btn.innerHTML = \u0027 Invia Risposte e Continua Raffinamento\u0027;\n        btn.disabled = false;\n        document.querySelectorAll(\u0027textarea\u0027).forEach(t =\u003e t.disabled = false);\n      }\n    });\n  \u003c/script\u003e\n\u003c/body\u003e\n\u003c/html\u003e",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "questions-form",
+                      "name":  "Form Domande HTML",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       1560,
+                                       620
+                                   ],
+                      "notes":  "Mostra form HTML con domande.\nQuando l\u0027utente invia, richiama lo stesso webhook con le risposte."
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "string":  [
+                                                                           {
+                                                                               "operation":  "notEmpty",
+                                                                               "value1":  "={{ .domain_model }}"
+                                                                           }
+                                                                       ]
+                                                        }
+                                     },
+                      "id":  "has-model",
+                      "name":  "Modello Presente?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2,
+                      "position":  [
+                                       640,
+                                       400
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "options":  {
+
+                                                     },
+                                         "responseBody":  "=\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\u003chead\u003e\u003cmeta charset=\"UTF-8\"\u003e\u003ctitle\u003eSeleziona Modello\u003c/title\u003e\u003c/head\u003e\n\u003cbody\u003e\n  \u003ch2\u003eSeleziona un file\u003c/h2\u003e\n  \u003cdiv id=\"list\"\u003eLoading...\u003c/div\u003e\n  \u003cscript\u003e\n  (async()=\u003e{\n    const r = await fetch(\u0027http://localhost:8002/source/files\u0027);\n    const d = await r.json();\n    const div = document.getElementById(\u0027list\u0027);\n    div.innerHTML=\u0027\u0027;\n    (d.files||[]).forEach(f=\u003e{\n      const b=document.createElement(\u0027button\u0027); b.textContent=f.name; b.onclick=async()=\u003e{\n        const fr=await fetch(\u0027http://localhost:8002/source/file?name=\u0027+encodeURIComponent(f.name));\n        const m=await fr.json();\n        await fetch(\u0027/webhook/agent2-start\u0027,{method:\u0027POST\u0027, headers:{\u0027Content-Type\u0027:\u0027application/json\u0027}, body: JSON.stringify({domain_model:m, use_llm:true, apply_auto_fixes:true})});\n      }; div.appendChild(b);\n    });\n  })();\n  \u003c/script\u003e\n\u003c/body\u003e\u003c/html\u003e"
+                                     },
+                      "id":  "select-model",
+                      "name":  "Seleziona Modello",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       900,
+                                       180
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "START - Webhook Principale":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "Prepara Dati",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "Prepara Dati":  {
+                                             "main":  [
+                                                          {
+                                                              "node":  "Modello Presente?",
+                                                              "type":  "main",
+                                                              "index":  0
+                                                          }
+                                                      ]
+                                         },
+                        "Max Iterazioni?":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Limite Iterazioni",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ],
+                                                             [
+                                                                 {
+                                                                     "node":  "ANALIZZA (Iter. {{ $(\u0027Prepara Dati\u0027).item.json.iteration + 1 }})",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "ANALIZZA (Iter. {{ $(\u0027Prepara Dati\u0027).item.json.iteration + 1 }})":  {
+                                                                                                           "main":  [
+                                                                                                                        [
+                                                                                                                            {
+                                                                                                                                "node":  "Combina Risultati con Contesto",
+                                                                                                                                "type":  "main",
+                                                                                                                                "index":  0
+                                                                                                                            }
+                                                                                                                        ]
+                                                                                                                    ]
+                                                                                                       },
+                        "Combina Risultati con Contesto":  {
+                                                               "main":  [
+                                                                            [
+                                                                                {
+                                                                                    "node":  "Modello Valido?",
+                                                                                    "type":  "main",
+                                                                                    "index":  0
+                                                                                }
+                                                                            ]
+                                                                        ]
+                                                           },
+                        "Modello Valido?":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Pagina Successo",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ],
+                                                             [
+                                                                 {
+                                                                     "node":  "Form Domande HTML",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Modello Presente?":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Max Iterazioni?",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ],
+                                                               [
+                                                                   {
+                                                                       "node":  "Seleziona Modello",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Seleziona Modello":  {
+                                                  "main":  [
+
+                                                           ]
+                                              }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1"
+                 },
+    "staticData":  null,
+    "tags":  [
+
+             ],
+    "triggerCount":  1,
+    "updatedAt":  "2025-12-18T17:00:00.000Z",
+    "versionId":  "1"
 }
+
