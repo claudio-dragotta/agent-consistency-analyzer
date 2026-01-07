@@ -1,6 +1,6 @@
 # Agent 2 — Consistency & Conflict Analyzer
 
-Validatore intelligente per modelli Domain‑Driven Design (DDD). Analizza la coerenza semantica, rileva conflitti tra bounded context, verifica la correttezza dell’architettura event‑driven, genera domande di follow‑up e produce un modello raffinato pronto per Agent 3 (generazione specifiche).
+Validatore intelligente per modelli Domain-Driven Design (DDD). Analizza la coerenza semantica, rileva conflitti tra bounded context, verifica la correttezza dell'architettura event-driven, genera domande di follow-up (template + LLM) e produce un modello raffinato pronto per Agent 3 (generazione specifiche).
 
 ## Panoramica Ecosistema
 
@@ -48,13 +48,14 @@ Nota Webhook n8n:
 
 ## Cosa fa Agent 2
 
-- Input: modello funzionale (JSON) da Agent 1.
+- Input: modello funzionale (JSON) da Agent 1 o da file locali in `input_agent/`.
 - Processo:
   - Regole DDD e checklist dalla knowledge base.
   - Analisi semantica (embeddings) per overlap/ambiguità.
   - Rilevazione conflitti (regole + LLM con Ollama/Llama3).
   - Validazioni EDA (naming eventi, single‑emitter, payload minimo).
-  - Auto‑fix per violazioni semplici e generazione domande di follow‑up.
+  - Auto-fix per violazioni semplici e generazione domande di follow-up.
+  - Se `use_llm=true`, aggiunge domande extra LLM per issue ad alta severita (senza duplicati).
 - Output:
   - Report dettagliato per categoria e severità.
   - Domande prioritarie e suggerimenti.
@@ -82,7 +83,7 @@ Endpoint A2A per orchestrazione fra agenti:
 - `POST /a2a/message/send`
 - `GET /a2a/tasks`, `GET /a2a/tasks/{task_id}`, `POST /a2a/tasks/{task_id}/cancel`
 
-Endpoint locali per test/file picker (usati dal workflow con fallback se manca il modello in ingresso):
+Endpoint locali per test/file picker (disponibili per uso manuale):
 - `GET /source/files` — elenco dei JSON in `input_agent`.
 - `GET /source/file?name=...` — contenuto del file richiesto.
 - `POST /source/analyze-by-file` — analizza un file per nome.
@@ -98,7 +99,9 @@ Endpoint locali per test/file picker (usati dal workflow con fallback se manca i
 - Caratteristiche: trigger Webhook, form HTML per le risposte, safety limit max 5 iterazioni.
 - Flusso: “Invio modello → Analisi → Domande → Risposte → Raffinamento → Ripeti finché valido”.
 - URL ANALIZZA preconfigurato per Docker Compose: `http://agent2-api:8002/analyze` (via env `AGENT2_API_URL`).
-- Se non passi `domain_model`, il workflow mostra una pagina “Seleziona Modello” che legge l’elenco da `http://localhost:8002/source/files` e prosegue automaticamente dopo la scelta.
+- Se non passi `domain_model`, il workflow mostra una pagina "Scegli Metodo":
+  - A2A: attende il modello da Agent 1.
+  - Locali: lista i file in `input_agent` e prosegue dopo la scelta.
 
 ## Integrazione Kafka
 
@@ -159,37 +162,64 @@ Esecuzione locale senza Docker:
 Buon lavoro con Agent 2!
 
 **Blocchi Workflow (Complete Loop)**
-- START – Webhook Principale
+- START - Webhook Principale
   - Tipo: `Webhook` (POST), path `agent2-start`, `responseMode=responseNode`.
-  - Input: `domain_model?`, `session_id?`, `iteration?`, `previous_answers?`, `max_iterations?`.
-  - Note: per l’URL produzione usa `/webhook/agent2-start` con workflow attivo; in test usa `/webhook-test/...` dopo “Execute Workflow”.
+  - Input: `domain_model?`, `session_id?`, `iteration?`, `previous_answers?`, `max_iterations?`, `mode?`, `file_name?`.
+  - Note: per l'URL produzione usa `/webhook/agent2-start` con workflow attivo; in test usa `/webhook-test/...` dopo "Execute Workflow".
+- File Selezionato?
+  - Tipo: `IF`.
+  - Condizione: se arriva `file_name`, legge il file locale e imposta `domain_model`.
+- Leggi File Locale
+  - Tipo: `Execute Command`.
+  - Cosa fa: legge il contenuto del file in `input_agent` usando il nome scelto.
+- Imposta Modello da File
+  - Tipo: `Set`.
+  - Cosa fa: converte il JSON letto dal file in `domain_model`.
 - Prepara Dati
   - Tipo: `Set`.
-  - Imposta: `iteration=0` se assente; `max_iterations=5`; `session_id` default ISO now; `domain_model` da `$json.body.domain_model || $json.domain_model` (stringificato); `previous_answers` da `$json.body.answers || {}`.
+  - Imposta: `iteration=0` se assente; `max_iterations=5`; `session_id` default ISO now; `domain_model` dal body o dal contesto; `previous_answers` da `$json.body.answers || {}`.
   - Output: normalizza i campi per i nodi successivi.
 - Modello Presente?
   - Tipo: `IF`.
-  - Condizione: il `domain_model` è valorizzato? Se no → “Seleziona Modello”.
-- Seleziona Modello
+  - Condizione: il `domain_model` e valorizzato? Se no -> "Metodo Locale?".
+- Metodo Locale?
+  - Tipo: `IF`.
+  - Condizione: se `mode=local` mostra lista file; se no passa a "Metodo A2A?".
+- Lista File Locali
+  - Tipo: `Execute Command`.
+  - Cosa fa: lista i file presenti in `input_agent`.
+- Seleziona Input Locale
   - Tipo: `Respond to Webhook` (HTML).
-  - Cosa fa: mostra lista dei file da `GET http://localhost:8002/source/files`; al click legge `GET /source/file?name=...` e re‑POSTa a `/webhook/agent2-start` con `domain_model` scelto.
+  - Cosa fa: mostra l'elenco dei file in `input_agent` e re-POSTa a `/webhook/agent2-start` con `file_name`.
+- Metodo A2A?
+  - Tipo: `IF`.
+  - Condizione: se `mode=a2a` mostra pagina di attesa, altrimenti mostra "Scegli Metodo".
+- Attesa A2A
+  - Tipo: `Respond to Webhook` (HTML).
+  - Cosa fa: pagina di attesa finche Agent 1 invia il modello al webhook.
+- Scegli Metodo
+  - Tipo: `Respond to Webhook` (HTML).
+  - Cosa fa: scelta iniziale tra A2A e input locali.
 - Max Iterazioni?
   - Tipo: `IF`.
-  - Condizione: `iteration < max_iterations`. Se false → “Pagina Successo” (stop di sicurezza).
+  - Condizione: `iteration < max_iterations`. Se false -> "Limite Iterazioni" (nodo di stop/sicurezza).
+- Limite Iterazioni (nota)
+  - Stato: nodo referenziato nelle connessioni, ma non definito nel JSON del workflow.
+  - Azione: aggiungere il nodo in n8n o aggiornarne il riferimento se il nome e diverso.
 - ANALIZZA (iterativa)
   - Tipo: `HTTP Request` POST.
   - URL: `={{ $env.AGENT2_API_URL || 'http://host.docker.internal:8002' }}/analyze`.
   - Body: `domain_model` (JSON), `use_llm=true`, `apply_auto_fixes=true`, `previous_answers` (se presenti).
-  - Output: risposta dell’API con `status`, `summary`, `follow_up_questions`, `refined_model`.
+  - Output: risposta dell'API con `status`, `summary`, `follow_up_questions`, `refined_model`.
 - Combina Risultati con Contesto
-  - Tipo: `Function/Set`.
-  - Cosa fa: incrementa `iteration`, aggiorna `domain_model` con `refined_model`, serializza `summary`/`follow_up_questions` per il form.
+  - Tipo: `Set`.
+  - Cosa fa: unisce `status`, `follow_up_questions`, `refined_model` e `summary` al contesto di sessione.
 - Modello Valido?
   - Tipo: `IF`.
-  - Condizione: `status === 'VALID'`. Se true → “Pagina Successo”, altrimenti → “Form Domande HTML”.
+  - Condizione: `status === 'VALID'`. Se true -> "Pagina Successo", altrimenti -> "Form Domande HTML".
 - Form Domande HTML
   - Tipo: `Respond to Webhook` (HTML form).
-  - Cosa fa: visualizza le domande con severità, raccoglie le risposte e le invia a `/webhook/agent2-start` per l’iterazione successiva.
+  - Cosa fa: visualizza le domande con severita, raccoglie le risposte e le invia a `/webhook/agent2-start` per l'iterazione successiva.
 - Pagina Successo
   - Tipo: `Respond to Webhook`.
   - Cosa fa: mostra riepilogo finale (conteggi, stato) e termina il flusso.

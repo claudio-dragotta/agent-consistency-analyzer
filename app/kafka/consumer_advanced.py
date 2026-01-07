@@ -101,10 +101,11 @@ class Agent2KafkaConsumer:
 
             # Step 3: Generate Questions
             logger.info(f"[{message_id}] Generating questions...")
-            questions = question_generator.generate_questions(
+            questions = await question_generator.generate_questions(
                 semantic_issues,
                 conflict_issues,
-                max_questions=settings.MAX_FOLLOW_UP_QUESTIONS
+                max_questions=settings.MAX_FOLLOW_UP_QUESTIONS,
+                use_llm=False
             )
 
             # Step 4: Refine Model

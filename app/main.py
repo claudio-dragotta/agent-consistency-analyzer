@@ -1,4 +1,4 @@
-﻿"""
+"""
 FastAPI entry point for Agent 2 - Consistency & Conflict Analyzer
 
 Provides:
@@ -151,8 +151,6 @@ async def get_agent_card():
         return JSONResponse(content=agent_card)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Agent card not found")
-
-
 @app.post("/a2a/message/send", response_model=A2AMessageResponse)
 async def a2a_send_message(
     request: SendMessageRequest,
@@ -294,8 +292,6 @@ async def a2a_list_tasks(
     return {
         "tasks": [t.model_dump(by_alias=True) for t in tasks]
     }
-
-
 @app.post("/a2a/tasks/{task_id}/cancel")
 async def a2a_cancel_task(task_id: str):
     """
@@ -355,8 +351,6 @@ async def health_check():
             "embeddings_model": settings.EMBEDDINGS_MODEL
         }
     }
-
-
 @app.post("/analyze", response_model=ValidationResponse)
 async def analyze_domain_model(request: DomainModelRequest):
     """
@@ -389,9 +383,6 @@ async def analyze_domain_model(request: DomainModelRequest):
     except Exception as e:
         logger.error(f"Error analyzing domain model: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@a
 
 @app.get("/source/files")
 async def list_input_files() -> Dict[str, Any]:
@@ -437,8 +428,6 @@ class AnalyzeByFileRequest(BaseModel):
     use_llm: bool = True
     apply_auto_fixes: bool = True
     previous_answers: Optional[Dict[str, str]] = None
-
-
 @app.post("/source/analyze-by-file", response_model=ValidationResponse)
 async def analyze_by_file(request: AnalyzeByFileRequest):
     """Analyze a domain model by selecting a JSON file from INPUT_DIR (testing helper)."""
@@ -465,7 +454,8 @@ async def analyze_by_file(request: AnalyzeByFileRequest):
         raise
     except Exception as e:
         logger.error(f"Error analyzing file: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))pp.get("/config")
+        raise HTTPException(status_code=500, detail=str(e))
+@app.get("/config")
 async def get_configuration():
     """Get current configuration (for debugging)"""
     return {
@@ -535,10 +525,11 @@ async def _process_domain_model(
         
         # Step 3: Generate Follow-up Questions
         logger.info(f"[{task_id}] Generating follow-up questions...")
-        follow_up_questions = question_generator.generate_questions(
-            semantic_issues, 
+        follow_up_questions = await question_generator.generate_questions(
+            semantic_issues,
             conflict_issues,
-            max_questions=settings.MAX_FOLLOW_UP_QUESTIONS
+            max_questions=settings.MAX_FOLLOW_UP_QUESTIONS,
+            use_llm=use_llm
         )
         logger.info(f"[{task_id}] Generated {len(follow_up_questions)} questions")
         
@@ -651,4 +642,6 @@ if __name__ == "__main__":
         reload=settings.API_RELOAD,
         log_level=settings.LOG_LEVEL.lower(),
     )
+
+
 

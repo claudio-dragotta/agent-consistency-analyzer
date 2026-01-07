@@ -5,9 +5,13 @@ Generates follow-up questions based on detected issues.
 Uses templates from validation_checklist.json and LLM for contextual questions.
 """
 
+import json
 import logging
+import re
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+
+import httpx
 
 from app.config import Settings, get_settings
 from app.services.semantic_analyzer import SemanticIssue, IssueType
@@ -46,7 +50,11 @@ class QuestionGenerator:
     
     Uses validation checklist templates and contextual generation
     to create meaningful questions for domain experts.
+
+    When use_llm=True, it adds a small number of LLM-generated questions
+    for high-severity issues to enrich the template-based set.
     """
+    LLM_EXTRA_QUESTIONS = 3
     
     def __init__(self, settings: Optional[Settings] = None):
         """
@@ -58,6 +66,89 @@ class QuestionGenerator:
         self.settings = settings or get_settings()
         self._validation_checklist: Optional[dict] = None
         self._question_counter = 0
+
+    async def _call_ollama(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+        """Call Ollama API to generate follow-up questions."""
+        url = self.settings.get_ollama_generate_url()
+        payload = {
+            "model": self.settings.OLLAMA_MODEL,
+            "prompt": prompt,
+            "stream": False
+        }
+        if system_prompt:
+            payload["system"] = system_prompt
+
+        async with httpx.AsyncClient(timeout=self.settings.OLLAMA_TIMEOUT) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            result = response.json()
+            return result.get("response", "")
+
+    def _normalize_question(self, text: str) -> str:
+        """Normalize question text for deduplication."""
+        return re.sub(r"\s+", " ", text.strip().lower())
+
+    def _issue_to_prompt_dict(self, issue_type: str, severity: str, description: str,
+                              affected_elements: List[str], contexts: List[str]) -> Dict[str, Any]:
+        """Convert an issue to a compact dict for LLM prompting."""
+        return {
+            "issue_type": issue_type,
+            "severity": severity,
+            "description": description,
+            "affected_elements": affected_elements,
+            "contexts": contexts
+        }
+
+    async def _generate_llm_questions(
+        self,
+        issues: List[Dict[str, Any]],
+        max_questions: int
+    ) -> List[FollowUpQuestion]:
+        """Generate extra questions with LLM based on top issues."""
+        if not issues or max_questions <= 0:
+            return []
+
+        system_prompt = (
+            "You are a Domain-Driven Design analyst. "
+            "Generate follow-up questions for domain experts to clarify issues. "
+            "Return ONLY a valid JSON array (no markdown). Each item must include: "
+            "question, severity, related_issue_type, affected_elements, context, "
+            "suggested_answers (optional array of short hints)."
+        )
+
+        prompt = (
+            "Generate up to "
+            f"{max_questions} follow-up questions for these high-severity issues:\n\n"
+            f"{json.dumps(issues, indent=2)}\n\n"
+            "Return ONLY a JSON array."
+        )
+
+        try:
+            response = await self._call_ollama(prompt, system_prompt)
+            raw = response.strip()
+            if raw.startswith("```"):
+                raw = re.sub(r"```(?:json)?\n?", "", raw).strip()
+                raw = raw.strip("`").strip()
+            parsed = json.loads(raw)
+        except Exception as e:
+            logger.warning(f"LLM question generation failed: {e}")
+            return []
+
+        questions: List[FollowUpQuestion] = []
+        if isinstance(parsed, list):
+            for item in parsed[:max_questions]:
+                if not isinstance(item, dict) or "question" not in item:
+                    continue
+                questions.append(FollowUpQuestion(
+                    question_id=self._get_next_question_id(),
+                    question=str(item.get("question", "")).strip(),
+                    context=str(item.get("context", "General")),
+                    related_issue_type=str(item.get("related_issue_type", "UNKNOWN")),
+                    severity=str(item.get("severity", "MEDIUM")),
+                    affected_elements=list(item.get("affected_elements", []) or []),
+                    suggested_answers=item.get("suggested_answers")
+                ))
+        return questions
     
     @property
     def validation_checklist(self) -> dict:
@@ -262,11 +353,12 @@ class QuestionGenerator:
             suggested_answers=suggested
         )
     
-    def generate_questions(
+    async def generate_questions(
         self,
         semantic_issues: List[SemanticIssue],
         conflict_issues: List[ConflictIssue],
-        max_questions: Optional[int] = None
+        max_questions: Optional[int] = None,
+        use_llm: bool = False
     ) -> List[FollowUpQuestion]:
         """
         Generate follow-up questions from all detected issues.
@@ -275,6 +367,7 @@ class QuestionGenerator:
             semantic_issues: List of semantic issues
             conflict_issues: List of conflict issues
             max_questions: Maximum number of questions to generate
+            use_llm: Whether to enrich questions using LLM
             
         Returns:
             List of follow-up questions
@@ -303,6 +396,43 @@ class QuestionGenerator:
                 questions.append(self.generate_from_semantic_issue(issue))
             else:
                 questions.append(self.generate_from_conflict_issue(issue))
+
+        # Optional LLM enrichment for high-severity issues
+        if use_llm and len(questions) < max_q:
+            high_severity = [i for i in all_issues if i[2] == "HIGH"]
+            if high_severity:
+                remaining = max_q - len(questions)
+                extra_cap = min(self.LLM_EXTRA_QUESTIONS, remaining)
+
+                llm_issues: List[Dict[str, Any]] = []
+                for issue_type, issue, severity in high_severity:
+                    if issue_type == "semantic":
+                        llm_issues.append(self._issue_to_prompt_dict(
+                            issue.issue_type.value,
+                            severity,
+                            issue.description,
+                            issue.affected_elements,
+                            issue.contexts
+                        ))
+                    else:
+                        llm_issues.append(self._issue_to_prompt_dict(
+                            issue.conflict_type.value,
+                            severity,
+                            issue.description,
+                            issue.affected_elements,
+                            issue.contexts
+                        ))
+
+                llm_questions = await self._generate_llm_questions(llm_issues, extra_cap)
+
+                existing_texts = {self._normalize_question(q.question) for q in questions}
+                for q in llm_questions:
+                    norm = self._normalize_question(q.question)
+                    if norm and norm not in existing_texts:
+                        questions.append(q)
+                        existing_texts.add(norm)
+                        if len(questions) >= max_q:
+                            break
         
         logger.info(f"Generated {len(questions)} follow-up questions")
         return questions

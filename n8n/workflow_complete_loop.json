@@ -23,11 +23,67 @@
                   },
                   {
                       "parameters":  {
+                                         "conditions":  {
+                                                            "string":  [
+                                                                           {
+                                                                               "value1":  "={{ $json.body && $json.body.file_name }}",
+                                                                               "operation":  "notEmpty"
+                                                                           }
+                                                                       ]
+                                                        }
+                                     },
+                      "id":  "check-file-selected",
+                      "name":  "File Selezionato?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2,
+                      "position":  [
+                                       380,
+                                       260
+                                   ],
+                      "notes":  "Se arriva un file_name, carica il modello dalla cartella input_agent."
+                  },
+                  {
+                      "parameters":  {
+                                         "command":  "={{ 'Get-Content -Raw \"C:\\\\Users\\\\ludov\\\\Desktop\\\\agent-consistency-analyzer\\\\input_agent\\\\' + $json.body.file_name + '\"' }}"
+                                     },
+                      "id":  "read-local-file",
+                      "name":  "Leggi File Locale",
+                      "type":  "n8n-nodes-base.executeCommand",
+                      "typeVersion":  1,
+                      "position":  [
+                                       600,
+                                       180
+                                   ],
+                      "notes":  "Legge il file selezionato dall\u0027utente."
+                  },
+                  {
+                      "parameters":  {
+                                         "values":  {
+                                                        "string":  [
+                                                                       {
+                                                                           "name":  "domain_model",
+                                                                           "value":  "={{ JSON.stringify(JSON.parse($json.stdout)) }}"
+                                                                       }
+                                                                   ]
+                                                    }
+                                     },
+                      "id":  "set-model-from-file",
+                      "name":  "Imposta Modello da File",
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.3,
+                      "position":  [
+                                       820,
+                                       180
+                                   ],
+                      "notes":  "Trasforma il contenuto JSON del file in domain_model."
+                  },
+                  {
+                      "parameters":  {
                                          "values":  {
                                                         "number":  [
                                                                        {
                                                                            "name":  "iteration",
-                                                                           "value":  "={{ $json.body.iteration || 0 }}"
+                                                                           "value":  "={{ ($json.body && $json.body.iteration) || 0 }}"
                                                                        },
                                                                        {
                                                                            "name":  "max_iterations",
@@ -37,15 +93,15 @@
                                                         "string":  [
                                                                        {
                                                                            "name":  "domain_model",
-                                                                           "value":  "={{ JSON.stringify($json.body.domain_model || $json.domain_model) }}"
+                                                                           "value":  "={{ ($json.body && $json.body.domain_model) ? JSON.stringify($json.body.domain_model) : ($json.domain_model ? (typeof $json.domain_model === 'string' ? $json.domain_model : JSON.stringify($json.domain_model)) : undefined) }}"
                                                                        },
                                                                        {
                                                                            "name":  "session_id",
-                                                                           "value":  "={{ $json.body.session_id || $now.toISO() }}"
+                                                                           "value":  "={{ ($json.body && $json.body.session_id) || $now.toISO() }}"
                                                                        },
                                                                        {
                                                                            "name":  "previous_answers",
-                                                                           "value":  "={{ JSON.stringify($json.body.answers || {}) }}"
+                                                                           "value":  "={{ JSON.stringify(($json.body && $json.body.answers) || {}) }}"
                                                                        }
                                                                    ],
                                                         "boolean":  [
@@ -271,13 +327,100 @@
                   },
                   {
                       "parameters":  {
+                                         "conditions":  {
+                                                            "string":  [
+                                                                           {
+                                                                               "value1":  "={{ $json.body && $json.body.mode }}",
+                                                                               "operation":  "equals",
+                                                                               "value2":  "local"
+                                                                           }
+                                                                       ]
+                                                        }
+                                     },
+                      "id":  "check-local-mode",
+                      "name":  "Metodo Locale?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2,
+                      "position":  [
+                                       820,
+                                       280
+                                   ],
+                      "notes":  "Se l\u0027utente ha scelto input locali, mostra la lista file."
+                  },
+                  {
+                      "parameters":  {
+                                         "command":  "Get-ChildItem -Path \"C:\\Users\\ludov\\Desktop\\agent-consistency-analyzer\\input_agent\" -File | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress"
+                                     },
+                      "id":  "list-local-files",
+                      "name":  "Lista File Locali",
+                      "type":  "n8n-nodes-base.executeCommand",
+                      "typeVersion":  1,
+                      "position":  [
+                                       1040,
+                                       220
+                                   ],
+                      "notes":  "Recupera i nomi dei file presenti in input_agent."
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "html",
+                                         "responseBody":  "=\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003ctitle\u003eSeleziona Input Locale\u003c/title\u003e\n  \u003cstyle\u003e\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body {\n      font-family: \"Segoe UI\", Tahoma, Geneva, Verdana, sans-serif;\n      background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);\n      min-height: 100vh;\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      padding: 20px;\n    }\n    .container {\n      background: white;\n      width: 100%;\n      max-width: 720px;\n      border-radius: 18px;\n      padding: 32px;\n      box-shadow: 0 24px 70px rgba(15, 23, 42, 0.2);\n    }\n    h1 { font-size: 24px; margin-bottom: 8px; }\n    p { color: #475569; margin-bottom: 16px; }\n    .list { display: grid; gap: 10px; }\n    button {\n      padding: 14px 16px;\n      border-radius: 10px;\n      border: 1px solid #e2e8f0;\n      background: #0f172a;\n      color: white;\n      font-weight: 700;\n      cursor: pointer;\n      text-align: left;\n    }\n    button:hover { background: #1e293b; }\n    .empty { color: #64748b; font-style: italic; }\n  \u003c/style\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n  \u003cdiv class=\"container\"\u003e\n    \u003ch1\u003eSeleziona un file da input_agent\u003c/h1\u003e\n    \u003cp\u003eScegli uno dei file locali per avviare l\u0027analisi.\u003c/p\u003e\n    \u003cdiv id=\"list\" class=\"list\"\u003eCaricamento...\u003c/div\u003e\n  \u003c/div\u003e\n\n  \u003cscript\u003e\n    const files = {{ $json.stdout ? $json.stdout : '[]' }};\n    const list = document.getElementById('list');\n\n    if (!files.length) {\n      list.innerHTML = '\u003cdiv class=\"empty\"\u003eNessun file trovato nella cartella input_agent.\u003c/div\u003e';\n    } else {\n      list.innerHTML = '';\n      files.forEach((name) => {\n        const btn = document.createElement('button');\n        btn.textContent = name;\n        btn.addEventListener('click', async () => {\n          const res = await fetch('/webhook/agent2-start', {\n            method: 'POST',\n            headers: { 'Content-Type': 'application/json' },\n            body: JSON.stringify({ file_name: name })\n          });\n          document.body.innerHTML = await res.text();\n        });\n        list.appendChild(btn);\n      });\n    }\n  \u003c/script\u003e\n\u003c/body\u003e\n\u003c/html\u003e"
+                                     },
+                      "id":  "select-local-file",
+                      "name":  "Seleziona Input Locale",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       1260,
+                                       220
+                                   ],
+                      "notes":  "Mostra la lista dei file locali e avvia il loop quando l\u0027utente seleziona."
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "string":  [
+                                                                           {
+                                                                               "value1":  "={{ $json.body && $json.body.mode }}",
+                                                                               "operation":  "equals",
+                                                                               "value2":  "a2a"
+                                                                           }
+                                                                       ]
+                                                        }
+                                     },
+                      "id":  "check-a2a-mode",
+                      "name":  "Metodo A2A?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1040,
+                                       360
+                                   ],
+                      "notes":  "Se l\u0027utente sceglie A2A, mostra pagina di attesa."
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "html",
+                                         "responseBody":  "=\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003ctitle\u003eIn attesa di Agent 1\u003c/title\u003e\n  \u003cstyle\u003e\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body {\n      font-family: \"Segoe UI\", Tahoma, Geneva, Verdana, sans-serif;\n      background: radial-gradient(circle at top, #0f172a, #020617);\n      min-height: 100vh;\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      padding: 20px;\n      color: white;\n    }\n    .panel {\n      background: rgba(15, 23, 42, 0.8);\n      border: 1px solid rgba(148, 163, 184, 0.2);\n      border-radius: 16px;\n      padding: 36px;\n      max-width: 640px;\n      text-align: center;\n      box-shadow: 0 24px 70px rgba(2, 6, 23, 0.6);\n    }\n    h1 { font-size: 26px; margin-bottom: 12px; }\n    p { color: #cbd5f5; line-height: 1.6; }\n    .pulse {\n      width: 14px;\n      height: 14px;\n      border-radius: 50%;\n      background: #38bdf8;\n      margin: 18px auto 0;\n      animation: pulse 1.2s infinite;\n    }\n    @keyframes pulse {\n      0% { transform: scale(0.9); opacity: 0.6; }\n      50% { transform: scale(1.2); opacity: 1; }\n      100% { transform: scale(0.9); opacity: 0.6; }\n    }\n  \u003c/style\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n  \u003cdiv class=\"panel\"\u003e\n    \u003ch1\u003eIn attesa del modello da Agent 1\u003c/h1\u003e\n    \u003cp\u003eQuando Agent 1 invia il modello via A2A a \u003cstrong\u003e/webhook/agent2-start\u003c/strong\u003e, il flusso proseguir\u00e0 automaticamente.\u003c/p\u003e\n    \u003cdiv class=\"pulse\"\u003e\u003c/div\u003e\n  \u003c/div\u003e\n\u003c/body\u003e\n\u003c/html\u003e"
+                                     },
+                      "id":  "wait-a2a",
+                      "name":  "Attesa A2A",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       1260,
+                                       380
+                                   ]
+                  },
+                  {
+                      "parameters":  {
                                          "options":  {
 
                                                      },
-                                         "responseBody":  "=\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\u003chead\u003e\u003cmeta charset=\"UTF-8\"\u003e\u003ctitle\u003eSeleziona Modello\u003c/title\u003e\u003c/head\u003e\n\u003cbody\u003e\n  \u003ch2\u003eSeleziona un file\u003c/h2\u003e\n  \u003cdiv id=\"list\"\u003eLoading...\u003c/div\u003e\n  \u003cscript\u003e\n  (async()=\u003e{\n    const r = await fetch(\u0027http://localhost:8002/source/files\u0027);\n    const d = await r.json();\n    const div = document.getElementById(\u0027list\u0027);\n    div.innerHTML=\u0027\u0027;\n    (d.files||[]).forEach(f=\u003e{\n      const b=document.createElement(\u0027button\u0027); b.textContent=f.name; b.onclick=async()=\u003e{\n        const fr=await fetch(\u0027http://localhost:8002/source/file?name=\u0027+encodeURIComponent(f.name));\n        const m=await fr.json();\n        await fetch(\u0027/webhook/agent2-start\u0027,{method:\u0027POST\u0027, headers:{\u0027Content-Type\u0027:\u0027application/json\u0027}, body: JSON.stringify({domain_model:m, use_llm:true, apply_auto_fixes:true})});\n      }; div.appendChild(b);\n    });\n  })();\n  \u003c/script\u003e\n\u003c/body\u003e\u003c/html\u003e"
+                                         "responseBody":  "=\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003ctitle\u003eScegli Metodo\u003c/title\u003e\n  \u003cstyle\u003e\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body {\n      font-family: \"Segoe UI\", Tahoma, Geneva, Verdana, sans-serif;\n      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);\n      min-height: 100vh;\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      padding: 20px;\n      color: #0f172a;\n    }\n    .container {\n      background: white;\n      width: 100%;\n      max-width: 720px;\n      border-radius: 18px;\n      padding: 40px;\n      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);\n    }\n    h1 { font-size: 28px; margin-bottom: 12px; }\n    p { color: #475569; margin-bottom: 24px; line-height: 1.6; }\n    .actions { display: grid; gap: 14px; }\n    button {\n      padding: 16px 20px;\n      border-radius: 12px;\n      border: none;\n      font-size: 16px;\n      font-weight: 700;\n      cursor: pointer;\n      transition: transform 0.2s ease, box-shadow 0.2s ease;\n    }\n    .btn-a2a { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; }\n    .btn-local { background: linear-gradient(135deg, #14b8a6, #0f766e); color: white; }\n    button:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(15, 23, 42, 0.2); }\n    .note { margin-top: 18px; font-size: 13px; color: #64748b; }\n  \u003c/style\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n  \u003cdiv class=\"container\"\u003e\n    \u003ch1\u003eScegli il metodo di input\u003c/h1\u003e\n    \u003cp\u003eVuoi attendere il modello via A2A da Agent 1, oppure usare un file gi\u00e0 presente nella cartella input_agent?\u003c/p\u003e\n    \u003cdiv class=\"actions\"\u003e\n      \u003cbutton class=\"btn-a2a\" id=\"choose-a2a\"\u003eA2A (attendi Agent 1)\u003c/button\u003e\n      \u003cbutton class=\"btn-local\" id=\"choose-local\"\u003eUsa input locali\u003c/button\u003e\n    \u003c/div\u003e\n    \u003cdiv class=\"note\"\u003ePuoi tornare indietro ricaricando questa pagina.\u003c/div\u003e\n  \u003c/div\u003e\n\n  \u003cscript\u003e\n    async function postMode(mode) {\n      const res = await fetch('/webhook/agent2-start', {\n        method: 'POST',\n        headers: { 'Content-Type': 'application/json' },\n        body: JSON.stringify({ mode })\n      });\n      document.body.innerHTML = await res.text();\n    }\n    document.getElementById('choose-a2a').addEventListener('click', () => postMode('a2a'));\n    document.getElementById('choose-local').addEventListener('click', () => postMode('local'));\n  \u003c/script\u003e\n\u003c/body\u003e\n\u003c/html\u003e"
                                      },
                       "id":  "select-model",
-                      "name":  "Seleziona Modello",
+                      "name":  "Scegli Metodo",
                       "type":  "n8n-nodes-base.respondToWebhook",
                       "typeVersion":  1.1,
                       "position":  [
@@ -291,13 +434,53 @@
                                                            "main":  [
                                                                         [
                                                                             {
-                                                                                "node":  "Prepara Dati",
+                                                                                "node":  "File Selezionato?",
                                                                                 "type":  "main",
                                                                                 "index":  0
                                                                             }
                                                                         ]
                                                                     ]
                                                        },
+                        "File Selezionato?":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Leggi File Locale",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ],
+                                                               [
+                                                                   {
+                                                                       "node":  "Prepara Dati",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Leggi File Locale":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Imposta Modello da File",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Imposta Modello da File":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "Prepara Dati",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
                         "Prepara Dati":  {
                                              "main":  [
                                                           {
@@ -376,18 +559,75 @@
                                                                ],
                                                                [
                                                                    {
-                                                                       "node":  "Seleziona Modello",
+                                                                       "node":  "Metodo Locale?",
                                                                        "type":  "main",
                                                                        "index":  0
                                                                    }
                                                                ]
                                                            ]
                                               },
-                        "Seleziona Modello":  {
+                        "Metodo Locale?":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "Lista File Locali",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ],
+                                                            [
+                                                                {
+                                                                    "node":  "Metodo A2A?",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "Lista File Locali":  {
                                                   "main":  [
-
+                                                               [
+                                                                   {
+                                                                       "node":  "Seleziona Input Locale",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
                                                            ]
-                                              }
+                                              },
+                        "Metodo A2A?":  {
+                                            "main":  [
+                                                         [
+                                                             {
+                                                                 "node":  "Attesa A2A",
+                                                                 "type":  "main",
+                                                                 "index":  0
+                                                             }
+                                                         ],
+                                                         [
+                                                             {
+                                                                 "node":  "Scegli Metodo",
+                                                                 "type":  "main",
+                                                                 "index":  0
+                                                             }
+                                                         ]
+                                                     ]
+                                        },
+                        "Seleziona Input Locale":  {
+                                                       "main":  [
+
+                                                                ]
+                                                   },
+                        "Attesa A2A":  {
+                                           "main":  [
+
+                                                    ]
+                                       },
+                        "Scegli Metodo":  {
+                                               "main":  [
+
+                                                        ]
+                                           }
                     },
     "settings":  {
                      "executionOrder":  "v1"
