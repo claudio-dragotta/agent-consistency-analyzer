@@ -61,6 +61,168 @@ Nota Webhook n8n:
   - Domande prioritarie e suggerimenti.
   - Modello raffinato con metadati pronto per Agent 3.
 
+## Comunicazione tra i blocchi
+
+Flusso alto livello:
+- Agent 1 -> (Kafka `agent1-output`) -> Agent 2 -> (Kafka `agent2-output`) -> Agent 3.
+- Alternativa demo: n8n chiama direttamente `POST /analyze` e mostra le domande/risposte iterativamente.
+
+Pipeline interna di Agent 2 (runtime):
+- `app/main.py` riceve `domain_model`.
+- `semantic_analyzer` estrae entita e segnala overlap/ambiguita.
+- `conflict_detector` applica regole + LLM per conflitti requisiti/eventi.
+- `question_generator` crea follow-up coerenti con le issue rilevate.
+- `model_refiner` applica auto-fix e annota le correzioni nel modello.
+- Output JSON restituito via REST e/o inviato a Kafka.
+
+Integrazioni esterne principali:
+- n8n -> API: webhook `agent2-start` -> `POST /analyze`.
+- API -> Kafka: `producer.py` pubblica su `agent2-output` (consumato da Agent 3).
+- Kafka -> API: `consumer_advanced.py` ascolta `agent1-output` per triggerare analisi.
+
+Diagramma (alto livello):
+```
+Agent 1
+  |  (domain_model JSON)
+  v
+Kafka topic: agent1-output
+  |
+  v
+Agent 2 API (/analyze) ---------------------> Kafka topic: agent2-output ----> Agent 3
+  ^           |
+  |           v
+  |      n8n (webhook agent2-start)
+  |           |
+  +-----------+
+```
+
+## Struttura del dominio (schema JSON)
+
+La struttura base del `domain_model` (vedi `input_agent/example_good.json`):
+- `metadata`: id modello, versione, autore, descrizione.
+- `businessContext`: obiettivi, confini, stakeholder.
+- `domainMap`:
+  - `coreDomains` (piu domini con `boundedContext`, `entities`, `valueObjects`, `functionalRequirements`).
+  - (eventuali `supportingDomains`/`genericDomains` se presenti nel modello).
+- `eventDrivenModel`:
+  - `events`: nome, emitter, payload, consumers.
+  - `patterns`: broker, naming, garanzie di delivery/ordering.
+- `contextIntegrations`: relazioni tra domini (upstream/downstream, pattern di integrazione).
+
+Schema minimo (ridotto):
+```json
+{
+  "metadata": { "modelId": "...", "version": "..." },
+  "businessContext": { "objectives": [], "boundaries": [] },
+  "domainMap": {
+    "coreDomains": [
+      {
+        "id": "order-management",
+        "boundedContext": { "name": "OrderContext" },
+        "entities": [{ "name": "Order", "type": "aggregate-root" }],
+        "functionalRequirements": [{ "id": "FR-ORD-001", "description": "..." }]
+      }
+    ]
+  },
+  "eventDrivenModel": {
+    "events": [
+      { "name": "OrderCreated", "emitter": "order-management", "consumers": ["inventory"] }
+    ]
+  },
+  "contextIntegrations": [
+    { "upstream": "order-management", "downstream": "inventory", "integrationPattern": "event-driven" }
+  ]
+}
+```
+
+Schema esteso (esempio):
+```json
+{
+  "metadata": {
+    "modelId": "dm-ecommerce-001",
+    "version": "1.0.0",
+    "projectName": "E-Commerce Platform"
+  },
+  "businessContext": {
+    "objectives": ["Place orders online", "Manage inventory"],
+    "boundaries": ["B2C only", "Single currency"]
+  },
+  "domainMap": {
+    "coreDomains": [
+      {
+        "id": "order-management",
+        "name": "Order Management",
+        "boundedContext": { "name": "OrderContext" },
+        "entities": [
+          { "name": "Order", "type": "aggregate-root", "identity": "orderId (UUID)" }
+        ],
+        "valueObjects": [
+          { "name": "Money", "attributes": [{ "name": "amount", "type": "Decimal" }] }
+        ],
+        "functionalRequirements": [
+          { "id": "FR-ORD-001", "description": "Customer can create an order" }
+        ]
+      },
+      {
+        "id": "payment-processing",
+        "name": "Payment Processing",
+        "boundedContext": { "name": "PaymentContext" },
+        "entities": [
+          { "name": "Payment", "type": "aggregate-root", "identity": "paymentId (UUID)" }
+        ],
+        "functionalRequirements": [
+          { "id": "FR-PAY-001", "description": "Authorize payments" }
+        ]
+      }
+    ]
+  },
+  "eventDrivenModel": {
+    "events": [
+      {
+        "name": "OrderCreated",
+        "emitter": "order-management",
+        "payload": { "orderId": "UUID", "customerId": "UUID" },
+        "consumers": ["payment-processing", "inventory"]
+      },
+      {
+        "name": "PaymentAuthorized",
+        "emitter": "payment-processing",
+        "payload": { "paymentId": "UUID", "orderId": "UUID" },
+        "consumers": ["order-management"]
+      }
+    ],
+    "patterns": {
+      "primary": "pub-sub",
+      "messaging": {
+        "broker": "Apache Kafka",
+        "topicNamingConvention": "{domain}.{event-name}",
+        "partitioning": "By aggregate ID"
+      },
+      "guarantees": {
+        "delivery": "at-least-once",
+        "ordering": "per-partition (by aggregate ID)"
+      }
+    }
+  },
+  "contextIntegrations": [
+    {
+      "upstream": "order-management",
+      "downstream": "payment-processing",
+      "relationship": "customer-supplier",
+      "integrationPattern": "event-driven",
+      "description": "Order events trigger payment authorization"
+    },
+    {
+      "upstream": "order-management",
+      "downstream": "inventory",
+      "relationship": "customer-supplier",
+      "integrationPattern": "event-driven",
+      "description": "Order events trigger stock reservation"
+    }
+  ]
+}
+```
+
 ## API REST principali
 
 - `GET /` — info agente ed elenco endpoint.
