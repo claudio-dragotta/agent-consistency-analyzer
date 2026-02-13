@@ -27,7 +27,7 @@ jsonschema==4.20.0
 python-dotenv==1.0.0
 python-json-logger==2.0.7
 tenacity==8.2.3
-numpy>=1.24.0
+numpy>=1.24.0,<2.0.0
 
 # Testing
 pytest==7.4.3

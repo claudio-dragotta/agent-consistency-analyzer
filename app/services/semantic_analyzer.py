@@ -183,8 +183,11 @@ class SemanticAnalyzer:
                 d_type = domain.get("type", "unknown")
                 
                 for entity in domain.get("entities", []):
+                    # Skip reference-only entities (ownership resolved in previous iteration)
+                    if entity.get("_referenceOnly"):
+                        continue
                     attrs = [
-                        attr.get("name", "") 
+                        attr.get("name", "")
                         for attr in entity.get("attributes", [])
                     ]
                     entities.append(EntityInfo(
@@ -449,35 +452,65 @@ class SemanticAnalyzer:
         
         return issues
     
+    def _get_resolved_elements(self, domain_model: Dict[str, Any]) -> set:
+        """Extract element names that have already been resolved by user answers."""
+        resolved = set()
+        for fix in domain_model.get("_userGuidedFixes", []):
+            for elem in fix.get("affected_elements", []):
+                resolved.add(elem.lower())
+        for decision in domain_model.get("_ownershipDecisions", []):
+            entity = decision.get("entity", "")
+            if entity:
+                resolved.add(entity.lower())
+        for resolution in domain_model.get("_conflictResolutions", []):
+            for elem in resolution.get("affected_elements", []):
+                resolved.add(elem.lower())
+        return resolved
+
     def analyze(self, domain_model: Dict[str, Any]) -> List[SemanticIssue]:
         """
         Perform full semantic analysis on a domain model.
-        
+
         Args:
             domain_model: The domain model JSON to analyze
-            
+
         Returns:
             List of all detected semantic issues
         """
         logger.info("Starting semantic analysis...")
-        
+
+        resolved = self._get_resolved_elements(domain_model)
+        if resolved:
+            logger.info(f"Skipping already-resolved elements: {resolved}")
+
         issues = []
-        
+
         # Extract and analyze entities
         entities = self.extract_entities(domain_model)
         logger.info(f"Extracted {len(entities)} entities")
-        
+
         entity_issues = self.detect_entity_overlaps(entities)
+        # Filter out issues whose affected elements are ALL already resolved
+        if resolved:
+            entity_issues = [
+                issue for issue in entity_issues
+                if not all(elem.lower() in resolved for elem in issue.affected_elements)
+            ]
         issues.extend(entity_issues)
         logger.info(f"Found {len(entity_issues)} entity overlap issues")
-        
+
         # Extract and analyze terms
         terms = self.extract_terms(domain_model)
         logger.info(f"Extracted {len(terms)} terms")
-        
+
         term_issues = self.detect_semantic_ambiguities(terms)
+        if resolved:
+            term_issues = [
+                issue for issue in term_issues
+                if not all(elem.lower() in resolved for elem in issue.affected_elements)
+            ]
         issues.extend(term_issues)
         logger.info(f"Found {len(term_issues)} semantic ambiguity issues")
-        
+
         logger.info(f"Semantic analysis complete. Total issues: {len(issues)}")
         return issues

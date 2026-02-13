@@ -1,643 +1,661 @@
-﻿{
-    "name":  "Agent 2 - Loop Completo con Form HTML",
-    "nodes":  [
+{
+  "name": "Agent 2 - Loop Completo con Form HTML",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "agent2-start",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-start",
+      "name": "START",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        400
+      ],
+      "webhookId": "agent2-main",
+      "notes": "Webhook GET - mostra la pagina iniziale nel browser"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent2-submit",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-submit",
+      "name": "SUBMIT",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        560
+      ],
+      "webhookId": "agent2-submit",
+      "notes": "Webhook POST - riceve tutti i form submissions"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst body = raw.body || raw;\nlet requestType = 'initial';\n\nif (body.answers && body.domain_model_b64) {\n  requestType = 'answers';\n} else if (body.file_name) {\n  requestType = 'file';\n} else if (body.mode === 'local') {\n  requestType = 'local';\n} else if (body.mode === 'a2a') {\n  requestType = 'a2a';\n} else if (body.domain_model) {\n  requestType = 'file';\n}\n\nreturn [{ json: { ...body, requestType } }];"
+      },
+      "id": "detect-type",
+      "name": "Detect Request Type",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        400
+      ],
+      "notes": "Classifica la richiesta in: initial, local, file, a2a, answers"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
                   {
-                      "parameters":  {
-                                         "httpMethod":  "POST",
-                                         "path":  "agent2-start",
-                                         "responseMode":  "responseNode",
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "webhook-start",
-                      "name":  "START - Webhook Principale",
-                      "type":  "n8n-nodes-base.webhook",
-                      "typeVersion":  2,
-                      "position":  [
-                                       240,
-                                       400
-                                   ],
-                      "webhookId":  "agent2-main",
-                      "notes":  "Riceve il modello iniziale da Agent 1 o risposte dall\u0027utente.\nURL: http://127.0.0.1:5678/webhook/agent2-start"
-                  },
-                  {
-                      "parameters":  {
-                                         "conditions":  {
-                                                            "string":  [
-                                                                           {
-                                                                               "value1":  "={{ $json.body && $json.body.file_name }}",
-                                                                               "operation":  "notEmpty"
-                                                                           }
-                                                                       ]
-                                                        }
-                                     },
-                      "id":  "check-file-selected",
-                      "name":  "File Selezionato?",
-                      "type":  "n8n-nodes-base.if",
-                      "typeVersion":  2,
-                      "position":  [
-                                       380,
-                                       260
-                                   ],
-                      "notes":  "Se arriva un file_name, carica il modello dalla cartella input_agent."
-                  },
-                  {
-                      "parameters":  {
-                                         "command":  "={{ 'Get-Content -Raw \"C:\\\\Users\\\\ludov\\\\Desktop\\\\agent-consistency-analyzer\\\\input_agent\\\\' + $json.body.file_name + '\"' }}"
-                                     },
-                      "id":  "read-local-file",
-                      "name":  "Leggi File Locale",
-                      "type":  "n8n-nodes-base.executeCommand",
-                      "typeVersion":  1,
-                      "position":  [
-                                       600,
-                                       180
-                                   ],
-                      "notes":  "Legge il file selezionato dall\u0027utente."
-                  },
-                  {
-                      "parameters":  {
-                                         "values":  {
-                                                        "string":  [
-                                                                       {
-                                                                           "name":  "domain_model",
-                                                                           "value":  "={{ JSON.stringify(JSON.parse($json.stdout)) }}"
-                                                                       }
-                                                                   ]
-                                                    }
-                                     },
-                      "id":  "set-model-from-file",
-                      "name":  "Imposta Modello da File",
-                      "type":  "n8n-nodes-base.set",
-                      "typeVersion":  3.3,
-                      "position":  [
-                                       820,
-                                       180
-                                   ],
-                      "notes":  "Trasforma il contenuto JSON del file in domain_model."
-                  },
-                  {
-                      "parameters":  {
-                                         "values":  {
-                                                        "number":  [
-                                                                       {
-                                                                           "name":  "iteration",
-                                                                           "value":  "={{ ($json.body && $json.body.iteration) || 0 }}"
-                                                                       },
-                                                                       {
-                                                                           "name":  "max_iterations",
-                                                                           "value":  5
-                                                                       }
-                                                                   ],
-                                                        "string":  [
-                                                                       {
-                                                                           "name":  "domain_model",
-                                                                           "value":  "={{ ($json.body && $json.body.domain_model) ? JSON.stringify($json.body.domain_model) : ($json.domain_model ? (typeof $json.domain_model === 'string' ? $json.domain_model : JSON.stringify($json.domain_model)) : undefined) }}"
-                                                                       },
-                                                                       {
-                                                                           "name":  "session_id",
-                                                                           "value":  "={{ ($json.body && $json.body.session_id) || $now.toISO() }}"
-                                                                       },
-                                                                       {
-                                                                           "name":  "previous_answers",
-                                                                           "value":  "={{ JSON.stringify(($json.body && $json.body.answers) || {}) }}"
-                                                                       }
-                                                                   ],
-                                                        "boolean":  [
-                                                                        {
-                                                                            "name":  "use_llm",
-                                                                            "value":  true
-                                                                        },
-                                                                        {
-                                                                            "name":  "apply_auto_fixes",
-                                                                            "value":  true
-                                                                        }
-                                                                    ]
-                                                    }
-                                     },
-                      "id":  "prepare-data",
-                      "name":  "Prepara Dati",
-                      "type":  "n8n-nodes-base.set",
-                      "typeVersion":  3.3,
-                      "position":  [
-                                       460,
-                                       400
-                                   ],
-                      "notes":  "Estrae e prepara i dati per l\u0027analisi.\nGestisce sia chiamata iniziale che iterazioni successive."
-                  },
-                  {
-                      "parameters":  {
-                                         "conditions":  {
-                                                            "number":  [
-                                                                           {
-                                                                               "value1":  "={{ $json.iteration }}",
-                                                                               "operation":  "largerEqual",
-                                                                               "value2":  "={{ $json.max_iterations }}"
-                                                                           }
-                                                                       ]
-                                                        }
-                                     },
-                      "id":  "check-max-iter",
-                      "name":  "Max Iterazioni?",
-                      "type":  "n8n-nodes-base.if",
-                      "typeVersion":  2,
-                      "position":  [
-                                       680,
-                                       400
-                                   ],
-                      "notes":  "Check se abbiamo superato il massimo di iterazioni"
-                  },
-                  {
-                      "parameters":  {
-                                         "method":  "POST",
-                                         "url":  "={{ $env.AGENT2_API_URL || 'http://host.docker.internal:8002' }}/analyze",
-                                         "sendHeaders":  true,
-                                         "headerParameters":  {
-                                                                  "parameters":  [
-                                                                                     {
-                                                                                         "name":  "Content-Type",
-                                                                                         "value":  "application/json"
-                                                                                     }
-                                                                                 ]
-                                                              },
-                                         "sendBody":  true,
-                                         "specifyBody":  "json",
-                                         "jsonBody":  "={{ JSON.stringify({\n  \"domain_model\": JSON.parse($json.domain_model),\n  \"use_llm\": $json.use_llm,\n  \"apply_auto_fixes\": $json.apply_auto_fixes,\n  \"previous_answers\": JSON.parse($json.previous_answers)\n}) }}",
-                                         "options":  {
-                                                         "timeout":  120000
-                                                     }
-                                     },
-                      "id":  "analyze-api",
-                      "name":  "ANALIZZA (Iter. {{ $(\u0027Prepara Dati\u0027).item.json.iteration + 1 }})",
-                      "type":  "n8n-nodes-base.httpRequest",
-                      "typeVersion":  4.2,
-                      "position":  [
-                                       900,
-                                       500
-                                   ],
-                      "notes":  "Chiama Agent 2 API.\nSe ci sono previous_answers, le include per raffinamento."
-                  },
-                  {
-                      "parameters":  {
-                                         "values":  {
-                                                        "string":  [
-                                                                       {
-                                                                           "name":  "session_id",
-                                                                           "value":  "={{ $(\u0027Prepara Dati\u0027).item.json.session_id }}"
-                                                                       },
-                                                                       {
-                                                                           "name":  "domain_model",
-                                                                           "value":  "={{ $(\u0027Prepara Dati\u0027).item.json.domain_model }}"
-                                                                       },
-                                                                       {
-                                                                           "name":  "status",
-                                                                           "value":  "={{ $json.status }}"
-                                                                       },
-                                                                       {
-                                                                           "name":  "follow_up_questions",
-                                                                           "value":  "={{ JSON.stringify($json.follow_up_questions || []) }}"
-                                                                       },
-                                                                       {
-                                                                           "name":  "refined_model",
-                                                                           "value":  "={{ JSON.stringify($json.refined_model || {}) }}"
-                                                                       },
-                                                                       {
-                                                                           "name":  "summary",
-                                                                           "value":  "={{ JSON.stringify($json.summary || {}) }}"
-                                                                       }
-                                                                   ],
-                                                        "number":  [
-                                                                       {
-                                                                           "name":  "iteration",
-                                                                           "value":  "={{ $(\u0027Prepara Dati\u0027).item.json.iteration }}"
-                                                                       },
-                                                                       {
-                                                                           "name":  "max_iterations",
-                                                                           "value":  "={{ $(\u0027Prepara Dati\u0027).item.json.max_iterations }}"
-                                                                       }
-                                                                   ]
-                                                    }
-                                     },
-                      "id":  "merge-context",
-                      "name":  "Combina Risultati con Contesto",
-                      "type":  "n8n-nodes-base.set",
-                      "typeVersion":  3.3,
-                      "position":  [
-                                       1120,
-                                       500
-                                   ],
-                      "notes":  "Combina risultati API con contesto sessione"
-                  },
-                  {
-                      "parameters":  {
-                                         "conditions":  {
-                                                            "string":  [
-                                                                           {
-                                                                               "value1":  "={{ $json.status }}",
-                                                                               "operation":  "equals",
-                                                                               "value2":  "VALID"
-                                                                           }
-                                                                       ]
-                                                        }
-                                     },
-                      "id":  "check-valid",
-                      "name":  "Modello Valido?",
-                      "type":  "n8n-nodes-base.if",
-                      "typeVersion":  2,
-                      "position":  [
-                                       1340,
-                                       500
-                                   ],
-                      "notes":  "Se VALID â†’ Successo\nAltrimenti â†’ Mostra form"
-                  },
-                  {
-                      "parameters":  {
-                                         "respondWith":  "html",
-                                         "responseBody":  "=\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003ctitle\u003e Modello DDD Perfetto!\u003c/title\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003cstyle\u003e\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body {\n      font-family: \u0027Segoe UI\u0027, Tahoma, Geneva, Verdana, sans-serif;\n      background: linear-gradient(135deg, #10b981 0%, #059669 100%);\n      min-height: 100vh;\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      padding: 20px;\n    }\n    .container {\n      background: white;\n      max-width: 800px;\n      text-align: center;\n      border-radius: 20px;\n      padding: 60px 40px;\n      box-shadow: 0 30px 90px rgba(0,0,0,0.4);\n      animation: fadeIn 0.6s;\n    }\n    @keyframes fadeIn {\n      from { opacity: 0; transform: translateY(30px); }\n      to { opacity: 1; transform: translateY(0); }\n    }\n    .success-icon {\n      font-size: 120px;\n      margin-bottom: 30px;\n      animation: bounce 1s infinite;\n    }\n    @keyframes bounce {\n      0%, 100% { transform: translateY(0); }\n      50% { transform: translateY(-15px); }\n    }\n    h1 {\n      color: #059669;\n      font-size: 42px;\n      margin-bottom: 20px;\n      font-weight: 700;\n    }\n    .stats {\n      background: linear-gradient(135deg, #f0fdf4 0%, #d1fae5 100%);\n      border-radius: 15px;\n      padding: 35px;\n      margin: 40px 0;\n      text-align: left;\n      border: 2px solid #a7f3d0;\n    }\n    .stat-row {\n      display: flex;\n      justify-content: space-between;\n      align-items: center;\n      padding: 15px 0;\n      border-bottom: 1px solid #a7f3d0;\n    }\n    .stat-row:last-child { border-bottom: none; }\n    .stat-label {\n      color: #065f46;\n      font-weight: 600;\n      font-size: 16px;\n      display: flex;\n      align-items: center;\n      gap: 10px;\n    }\n    .stat-value {\n      color: #059669;\n      font-weight: 700;\n      font-size: 18px;\n    }\n    .message {\n      color: #6b7280;\n      line-height: 1.8;\n      margin-bottom: 30px;\n      font-size: 16px;\n    }\n    .btn-container {\n      display: flex;\n      gap: 15px;\n      justify-content: center;\n      flex-wrap: wrap;\n    }\n    .btn {\n      display: inline-block;\n      padding: 15px 35px;\n      border-radius: 10px;\n      text-decoration: none;\n      font-weight: 600;\n      transition: all 0.3s;\n      font-size: 15px;\n    }\n    .btn-primary {\n      background: linear-gradient(135deg, #10b981 0%, #059669 100%);\n      color: white;\n    }\n    .btn-secondary {\n      background: white;\n      color: #059669;\n      border: 2px solid #10b981;\n    }\n    .btn:hover {\n      transform: translateY(-3px);\n      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);\n    }\n  \u003c/style\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n  \u003cdiv class=\"container\"\u003e\n    \u003cdiv class=\"success-icon\"\u003e\u003c/div\u003e\n    \u003ch1\u003eModello DDD Perfetto!\u003c/h1\u003e\n    \u003cp class=\"message\"\u003e\n      \u003cstrong\u003eComplimenti!\u003c/strong\u003e Dopo \u003cstrong\u003e{{ $json.iteration + 1 }}\u003c/strong\u003e {{ $json.iteration === 0 ? \u0027iterazione\u0027 : \u0027iterazioni\u0027 }} di analisi e raffinamento collaborativo,\u003cbr\u003e\n      il tuo modello Domain-Driven Design Ã¨ ora \u003cstrong\u003ecompleto, validato e coerente\u003c/strong\u003e.\n    \u003c/p\u003e\n    \u003cdiv class=\"stats\"\u003e\n      \u003cdiv class=\"stat-row\"\u003e\n        \u003cspan class=\"stat-label\"\u003e Iterazioni completate\u003c/span\u003e\n        \u003cspan class=\"stat-value\"\u003e{{ $json.iteration + 1 }}\u003c/span\u003e\n      \u003c/div\u003e\n      \u003cdiv class=\"stat-row\"\u003e\n        \u003cspan class=\"stat-label\"\u003e Problemi risolti\u003c/span\u003e\n        \u003cspan class=\"stat-value\"\u003eTutti\u003c/span\u003e\n      \u003c/div\u003e\n      \u003cdiv class=\"stat-row\"\u003e\n        \u003cspan class=\"stat-label\"\u003e Status finale\u003c/span\u003e\n        \u003cspan class=\"stat-value\"\u003eVALID\u003c/span\u003e\n      \u003c/div\u003e\n      \u003cdiv class=\"stat-row\"\u003e\n        \u003cspan class=\"stat-label\"\u003eâ± Timestamp\u003c/span\u003e\n        \u003cspan class=\"stat-value\"\u003e{{ $now.toFormat(\u0027dd/MM/yyyy HH:mm:ss\u0027) }}\u003c/span\u003e\n      \u003c/div\u003e\n      \u003cdiv class=\"stat-row\"\u003e\n        \u003cspan class=\"stat-label\"\u003eðŸ†” Session ID\u003c/span\u003e\n        \u003cspan class=\"stat-value\" style=\"font-size: 12px; font-family: monospace;\"\u003e{{ $json.session_id }}\u003c/span\u003e\n      \u003c/div\u003e\n    \u003c/div\u003e\n    \u003cp style=\"color: #059669; margin-bottom: 35px; font-size: 15px; font-weight: 600;\"\u003e\n       Il modello raffinato Ã¨ ora pronto per essere passato ad \u003cstrong\u003eAgent 3\u003c/strong\u003e\u003cbr\u003e\n      per la generazione delle specifiche funzionali dettagliate.\n    \u003c/p\u003e\n    \u003cdiv class=\"btn-container\"\u003e\n      \u003ca href=\"http://127.0.0.1:5678\" class=\"btn btn-primary\"\u003e Torna a n8n\u003c/a\u003e\n      \u003ca href=\"http://localhost:8080\" class=\"btn btn-secondary\"\u003e Vedi Kafka UI\u003c/a\u003e\n    \u003c/div\u003e\n  \u003c/div\u003e\n\u003c/body\u003e\n\u003c/html\u003e",
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "success-page",
-                      "name":  "Pagina Successo",
-                      "type":  "n8n-nodes-base.respondToWebhook",
-                      "typeVersion":  1.1,
-                      "position":  [
-                                       1560,
-                                       380
-                                   ],
-                      "notes":  "Mostra pagina di successo finale"
-                  },
-                  {
-                      "parameters":  {
-                                         "respondWith":  "html",
-                                         "responseBody":  "=\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003ctitle\u003e Troppe Iterazioni\u003c/title\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cstyle\u003e\n    body {\n      font-family: Arial;\n      background: #fee2e2;\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      min-height: 100vh;\n      padding: 20px;\n    }\n    .container {\n      background: white;\n      padding: 40px;\n      border-radius: 15px;\n      max-width: 600px;\n      text-align: center;\n      border: 3px solid #ef4444;\n    }\n    h1 { color: #dc2626; }\n  \u003c/style\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n  \u003cdiv class=\"container\"\u003e\n    \u003cdiv style=\"font-size: 80px;\"\u003e\u003c/div\u003e\n    \u003ch1\u003eLimite Iterazioni Raggiunto\u003c/h1\u003e\n    \u003cp\u003eDopo {{ $(\u0027Prepara Dati\u0027).item.json.max_iterations }} iterazioni il modello presenta ancora problemi complessi.\u003c/p\u003e\n    \u003cp style=\"margin-top: 20px;\"\u003e\u003ca href=\"http://127.0.0.1:5678\"\u003eTorna a n8n\u003c/a\u003e\u003c/p\u003e\n  \u003c/div\u003e\n\u003c/body\u003e\n\u003c/html\u003e",
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "max-iter-page",
-                      "name":  "Limite Iterazioni",
-                      "type":  "n8n-nodes-base.respondToWebhook",
-                      "typeVersion":  1.1,
-                      "position":  [
-                                       900,
-                                       300
-                                   ],
-                      "notes":  "Mostra errore se troppe iterazioni"
-                  },
-                  {
-                      "parameters":  {
-                                         "respondWith":  "html",
-                                         "responseBody":  "=\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003ctitle\u003e Agent 2 - Domande di Validazione\u003c/title\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003cstyle\u003e\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body {\n      font-family: \u0027Segoe UI\u0027, Tahoma, Geneva, Verdana, sans-serif;\n      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n      min-height: 100vh;\n      padding: 20px;\n      display: flex;\n      justify-content: center;\n      align-items: flex-start;\n      padding-top: 40px;\n    }\n    .container {\n      background: white;\n      max-width: 900px;\n      width: 100%;\n      border-radius: 20px;\n      box-shadow: 0 30px 90px rgba(0,0,0,0.4);\n      overflow: hidden;\n      animation: slideIn 0.5s;\n    }\n    @keyframes slideIn {\n      from { opacity: 0; transform: translateY(-30px); }\n      to { opacity: 1; transform: translateY(0); }\n    }\n    .header {\n      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n      color: white;\n      padding: 40px;\n      text-align: center;\n      position: relative;\n    }\n    .header h1 { font-size: 32px; margin-bottom: 10px; font-weight: 700; }\n    .header p { opacity: 0.95; font-size: 15px; }\n    .content { padding: 45px; }\n    .iteration-badge {\n      display: inline-block;\n      background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);\n      color: #78350f;\n      padding: 8px 20px;\n      border-radius: 25px;\n      font-size: 13px;\n      font-weight: 700;\n      margin-bottom: 25px;\n      box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);\n    }\n    .summary {\n      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);\n      border-left: 5px solid #f59e0b;\n      padding: 20px;\n      margin-bottom: 35px;\n      border-radius: 8px;\n      box-shadow: 0 2px 8px rgba(0,0,0,0.05);\n    }\n    .summary h3 {\n      color: #78350f;\n      margin-bottom: 15px;\n      font-size: 18px;\n      display: flex;\n      align-items: center;\n      gap: 8px;\n    }\n    .summary-grid {\n      display: grid;\n      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));\n      gap: 12px;\n      margin-top: 12px;\n    }\n    .summary-item {\n      background: white;\n      padding: 10px 15px;\n      border-radius: 6px;\n      font-size: 14px;\n    }\n    .summary-item strong { color: #92400e; }\n    .question-block {\n      background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);\n      border: 2px solid #e5e7eb;\n      border-radius: 12px;\n      padding: 30px;\n      margin-bottom: 30px;\n      transition: all 0.3s;\n      position: relative;\n    }\n    .question-block:hover {\n      border-color: #667eea;\n      box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);\n      transform: translateY(-2px);\n    }\n    .question-number {\n      position: absolute;\n      top: -15px;\n      left: 20px;\n      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n      color: white;\n      width: 40px;\n      height: 40px;\n      border-radius: 50%;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      font-weight: 700;\n      font-size: 16px;\n      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);\n    }\n    .question-label {\n      font-weight: 600;\n      color: #1f2937;\n      margin-bottom: 18px;\n      margin-top: 10px;\n      font-size: 17px;\n      line-height: 1.5;\n    }\n    .severity-badge {\n      display: inline-block;\n      padding: 4px 12px;\n      border-radius: 15px;\n      font-size: 11px;\n      margin-left: 10px;\n      font-weight: 700;\n      vertical-align: middle;\n    }\n    .severity-CRITICAL { background: #fee2e2; color: #991b1b; }\n    .severity-HIGH { background: #fed7aa; color: #9a3412; }\n    .severity-MEDIUM { background: #fef3c7; color: #78350f; }\n    .severity-LOW { background: #dbeafe; color: #1e40af; }\n    textarea {\n      width: 100%;\n      padding: 16px;\n      border: 2px solid #d1d5db;\n      border-radius: 10px;\n      font-size: 15px;\n      font-family: inherit;\n      resize: vertical;\n      min-height: 120px;\n      transition: all 0.3s;\n      line-height: 1.6;\n    }\n    textarea:focus {\n      outline: none;\n      border-color: #667eea;\n      box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);\n    }\n    .suggested-answers {\n      margin-top: 15px;\n      padding: 15px;\n      background: white;\n      border-radius: 8px;\n      font-size: 13px;\n      color: #6b7280;\n      border: 1px solid #e5e7eb;\n    }\n    .suggested-answers strong { color: #374151; display: block; margin-bottom: 8px; }\n    .suggested-answers ul { padding-left: 25px; }\n    .suggested-answers li { margin-bottom: 5px; line-height: 1.5; }\n    button {\n      width: 100%;\n      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n      color: white;\n      border: none;\n      padding: 20px;\n      border-radius: 12px;\n      font-size: 17px;\n      font-weight: 700;\n      cursor: pointer;\n      transition: all 0.3s;\n      margin-top: 30px;\n      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);\n    }\n    button:hover {\n      transform: translateY(-3px);\n      box-shadow: 0 12px 30px rgba(102, 126, 234, 0.4);\n    }\n    button:active { transform: translateY(-1px); }\n    .footer {\n      text-align: center;\n      padding: 25px;\n      color: #9ca3af;\n      font-size: 13px;\n      border-top: 1px solid #e5e7eb;\n      background: #f9fafb;\n    }\n  \u003c/style\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n  \u003cdiv class=\"container\"\u003e\n    \u003cdiv class=\"header\"\u003e\n      \u003ch1\u003e Agent 2 - Validazione DDD\u003c/h1\u003e\n      \u003cp\u003eRispond alle domande per raffinare collaborativamente il modello\u003c/p\u003e\n    \u003c/div\u003e\n    \u003cdiv class=\"content\"\u003e\n      \u003cdiv class=\"iteration-badge\"\u003e\n         Iterazione {{ $json.iteration + 1 }} di {{ $json.max_iterations }}\n      \u003c/div\u003e\n      \n      \u003cdiv class=\"summary\"\u003e\n        \u003ch3\u003e Riepilogo Problemi Rilevati\u003c/h3\u003e\n        \u003cdiv class=\"summary-grid\"\u003e\n          \u003cdiv class=\"summary-item\"\u003e\n            \u003cstrong\u003e{{ JSON.parse($json.summary).total_issues || 0 }}\u003c/strong\u003e Problemi totali\n          \u003c/div\u003e\n          \u003cdiv class=\"summary-item\"\u003e\n            \u003cstrong\u003e{{ JSON.parse($json.summary).entity_overlaps || 0 }}\u003c/strong\u003e Entity overlaps\n          \u003c/div\u003e\n          \u003cdiv class=\"summary-item\"\u003e\n            \u003cstrong\u003e{{ JSON.parse($json.summary).requirement_conflicts || 0 }}\u003c/strong\u003e Conflitti requisiti\n          \u003c/div\u003e\n          \u003cdiv class=\"summary-item\"\u003e\n            \u003cstrong\u003e{{ JSON.parse($json.summary).event_architecture_violations || 0 }}\u003c/strong\u003e Violazioni eventi\n          \u003c/div\u003e\n        \u003c/div\u003e\n      \u003c/div\u003e\n\n      \u003cform id=\"answersForm\"\u003e\n        \u003cinput type=\"hidden\" name=\"session_id\" value=\"{{ $json.session_id }}\"\u003e\n        \u003cinput type=\"hidden\" name=\"iteration\" value=\"{{ $json.iteration + 1 }}\"\u003e\n        \u003cinput type=\"hidden\" name=\"domain_model\" value=\u0027{{ $json.refined_model || $json.domain_model }}\u0027\u003e\n        \u003cinput type=\"hidden\" name=\"max_iterations\" value=\"{{ $json.max_iterations }}\"\u003e\n        \n        {{ JSON.parse($json.follow_up_questions).map((q, i) =\u003e `\n          \u003cdiv class=\"question-block\"\u003e\n            \u003cdiv class=\"question-number\"\u003e${i + 1}\u003c/div\u003e\n            \u003cdiv class=\"question-label\"\u003e\n              ${q.question}\n              \u003cspan class=\"severity-badge severity-${q.severity || \u0027MEDIUM\u0027}\"\u003e${q.severity || \u0027MEDIUM\u0027}\u003c/span\u003e\n            \u003c/div\u003e\n            \u003ctextarea \n              name=\"q${i}\" \n              id=\"answer_${i}\" \n              placeholder=\"Inserisci la tua risposta dettagliata...\"\n              required\n            \u003e\u003c/textarea\u003e\n            ${q.suggested_answers \u0026\u0026 q.suggested_answers.length \u003e 0 ? `\n              \u003cdiv class=\"suggested-answers\"\u003e\n                \u003cstrong\u003e Suggerimenti di risposta:\u003c/strong\u003e\n                \u003cul\u003e\n                  ${q.suggested_answers.map(s =\u003e `\u003cli\u003e${s}\u003c/li\u003e`).join(\u0027\u0027)}\n                \u003c/ul\u003e\n              \u003c/div\u003e\n            ` : \u0027\u0027}\n          \u003c/div\u003e\n        `).join(\u0027\u0027) }}\n\n        \u003cbutton type=\"submit\"\u003e Invia Risposte e Continua Raffinamento\u003c/button\u003e\n      \u003c/form\u003e\n    \u003c/div\u003e\n    \u003cdiv class=\"footer\"\u003e\n       Agent 2 - Consistency \u0026 Conflict Analyzer | Powered by n8n + Ollama + Llama3\n    \u003c/div\u003e\n  \u003c/div\u003e\n\n  \u003cscript\u003e\n    document.getElementById(\u0027answersForm\u0027).addEventListener(\u0027submit\u0027, async function(e) {\n      e.preventDefault();\n      const formData = new FormData(this);\n      const data = {\n        session_id: formData.get(\u0027session_id\u0027),\n        iteration: parseInt(formData.get(\u0027iteration\u0027)),\n        max_iterations: parseInt(formData.get(\u0027max_iterations\u0027)),\n        domain_model: JSON.parse(formData.get(\u0027domain_model\u0027)),\n        answers: {}\n      };\n      \n      // Raccogli risposte\n      for (let [key, value] of formData.entries()) {\n        if (key.startsWith(\u0027q\u0027)) {\n          data.answers[key] = value;\n        }\n      }\n      \n      // Mostra loading\n      const btn = document.querySelector(\u0027button\u0027);\n      btn.innerHTML = \u0027â³ Elaborazione risposte e rianalisi in corso...\u0027;\n      btn.disabled = true;\n      document.querySelectorAll(\u0027textarea\u0027).forEach(t =\u003e t.disabled = true);\n      \n      try {\n        // Richiama lo stesso webhook con le risposte\n        const response = await fetch(\u0027http://127.0.0.1:5678/webhook/agent2-start\u0027, {\n          method: \u0027POST\u0027,\n          headers: { \u0027Content-Type\u0027: \u0027application/json\u0027 },\n          body: JSON.stringify(data)\n        });\n        \n        if (response.ok) {\n          // Sostituisci la pagina con la risposta\n          document.body.innerHTML = await response.text();\n        } else {\n          throw new Error(\u0027Errore nella richiesta\u0027);\n        }\n      } catch (error) {\n        alert(\u0027Errore nell\\\u0027invio. Riprova.\u0027);\n        btn.innerHTML = \u0027 Invia Risposte e Continua Raffinamento\u0027;\n        btn.disabled = false;\n        document.querySelectorAll(\u0027textarea\u0027).forEach(t =\u003e t.disabled = false);\n      }\n    });\n  \u003c/script\u003e\n\u003c/body\u003e\n\u003c/html\u003e",
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "questions-form",
-                      "name":  "Form Domande HTML",
-                      "type":  "n8n-nodes-base.respondToWebhook",
-                      "typeVersion":  1.1,
-                      "position":  [
-                                       1560,
-                                       620
-                                   ],
-                      "notes":  "Mostra form HTML con domande.\nQuando l\u0027utente invia, richiama lo stesso webhook con le risposte."
-                  },
-                  {
-                      "parameters":  {
-                                         "conditions":  {
-                                                            "string":  [
-                                                                           {
-                                                                               "operation":  "notEmpty",
-                                                                               "value1":  "={{ .domain_model }}"
-                                                                           }
-                                                                       ]
-                                                        }
-                                     },
-                      "id":  "has-model",
-                      "name":  "Modello Presente?",
-                      "type":  "n8n-nodes-base.if",
-                      "typeVersion":  2,
-                      "position":  [
-                                       640,
-                                       400
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "conditions":  {
-                                                            "string":  [
-                                                                           {
-                                                                               "value1":  "={{ $json.body && $json.body.mode }}",
-                                                                               "operation":  "equals",
-                                                                               "value2":  "local"
-                                                                           }
-                                                                       ]
-                                                        }
-                                     },
-                      "id":  "check-local-mode",
-                      "name":  "Metodo Locale?",
-                      "type":  "n8n-nodes-base.if",
-                      "typeVersion":  2,
-                      "position":  [
-                                       820,
-                                       280
-                                   ],
-                      "notes":  "Se l\u0027utente ha scelto input locali, mostra la lista file."
-                  },
-                  {
-                      "parameters":  {
-                                         "command":  "Get-ChildItem -Path \"C:\\Users\\ludov\\Desktop\\agent-consistency-analyzer\\input_agent\" -File | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress"
-                                     },
-                      "id":  "list-local-files",
-                      "name":  "Lista File Locali",
-                      "type":  "n8n-nodes-base.executeCommand",
-                      "typeVersion":  1,
-                      "position":  [
-                                       1040,
-                                       220
-                                   ],
-                      "notes":  "Recupera i nomi dei file presenti in input_agent."
-                  },
-                  {
-                      "parameters":  {
-                                         "respondWith":  "html",
-                                         "responseBody":  "=\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003ctitle\u003eSeleziona Input Locale\u003c/title\u003e\n  \u003cstyle\u003e\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body {\n      font-family: \"Segoe UI\", Tahoma, Geneva, Verdana, sans-serif;\n      background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);\n      min-height: 100vh;\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      padding: 20px;\n    }\n    .container {\n      background: white;\n      width: 100%;\n      max-width: 720px;\n      border-radius: 18px;\n      padding: 32px;\n      box-shadow: 0 24px 70px rgba(15, 23, 42, 0.2);\n    }\n    h1 { font-size: 24px; margin-bottom: 8px; }\n    p { color: #475569; margin-bottom: 16px; }\n    .list { display: grid; gap: 10px; }\n    button {\n      padding: 14px 16px;\n      border-radius: 10px;\n      border: 1px solid #e2e8f0;\n      background: #0f172a;\n      color: white;\n      font-weight: 700;\n      cursor: pointer;\n      text-align: left;\n    }\n    button:hover { background: #1e293b; }\n    .empty { color: #64748b; font-style: italic; }\n  \u003c/style\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n  \u003cdiv class=\"container\"\u003e\n    \u003ch1\u003eSeleziona un file da input_agent\u003c/h1\u003e\n    \u003cp\u003eScegli uno dei file locali per avviare l\u0027analisi.\u003c/p\u003e\n    \u003cdiv id=\"list\" class=\"list\"\u003eCaricamento...\u003c/div\u003e\n  \u003c/div\u003e\n\n  \u003cscript\u003e\n    const files = {{ $json.stdout ? $json.stdout : '[]' }};\n    const list = document.getElementById('list');\n\n    if (!files.length) {\n      list.innerHTML = '\u003cdiv class=\"empty\"\u003eNessun file trovato nella cartella input_agent.\u003c/div\u003e';\n    } else {\n      list.innerHTML = '';\n      files.forEach((name) => {\n        const btn = document.createElement('button');\n        btn.textContent = name;\n        btn.addEventListener('click', async () => {\n          const res = await fetch('/webhook/agent2-start', {\n            method: 'POST',\n            headers: { 'Content-Type': 'application/json' },\n            body: JSON.stringify({ file_name: name })\n          });\n          document.body.innerHTML = await res.text();\n        });\n        list.appendChild(btn);\n      });\n    }\n  \u003c/script\u003e\n\u003c/body\u003e\n\u003c/html\u003e"
-                                     },
-                      "id":  "select-local-file",
-                      "name":  "Seleziona Input Locale",
-                      "type":  "n8n-nodes-base.respondToWebhook",
-                      "typeVersion":  1.1,
-                      "position":  [
-                                       1260,
-                                       220
-                                   ],
-                      "notes":  "Mostra la lista dei file locali e avvia il loop quando l\u0027utente seleziona."
-                  },
-                  {
-                      "parameters":  {
-                                         "conditions":  {
-                                                            "string":  [
-                                                                           {
-                                                                               "value1":  "={{ $json.body && $json.body.mode }}",
-                                                                               "operation":  "equals",
-                                                                               "value2":  "a2a"
-                                                                           }
-                                                                       ]
-                                                        }
-                                     },
-                      "id":  "check-a2a-mode",
-                      "name":  "Metodo A2A?",
-                      "type":  "n8n-nodes-base.if",
-                      "typeVersion":  2,
-                      "position":  [
-                                       1040,
-                                       360
-                                   ],
-                      "notes":  "Se l\u0027utente sceglie A2A, mostra pagina di attesa."
-                  },
-                  {
-                      "parameters":  {
-                                         "respondWith":  "html",
-                                         "responseBody":  "=\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003ctitle\u003eIn attesa di Agent 1\u003c/title\u003e\n  \u003cstyle\u003e\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body {\n      font-family: \"Segoe UI\", Tahoma, Geneva, Verdana, sans-serif;\n      background: radial-gradient(circle at top, #0f172a, #020617);\n      min-height: 100vh;\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      padding: 20px;\n      color: white;\n    }\n    .panel {\n      background: rgba(15, 23, 42, 0.8);\n      border: 1px solid rgba(148, 163, 184, 0.2);\n      border-radius: 16px;\n      padding: 36px;\n      max-width: 640px;\n      text-align: center;\n      box-shadow: 0 24px 70px rgba(2, 6, 23, 0.6);\n    }\n    h1 { font-size: 26px; margin-bottom: 12px; }\n    p { color: #cbd5f5; line-height: 1.6; }\n    .pulse {\n      width: 14px;\n      height: 14px;\n      border-radius: 50%;\n      background: #38bdf8;\n      margin: 18px auto 0;\n      animation: pulse 1.2s infinite;\n    }\n    @keyframes pulse {\n      0% { transform: scale(0.9); opacity: 0.6; }\n      50% { transform: scale(1.2); opacity: 1; }\n      100% { transform: scale(0.9); opacity: 0.6; }\n    }\n  \u003c/style\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n  \u003cdiv class=\"panel\"\u003e\n    \u003ch1\u003eIn attesa del modello da Agent 1\u003c/h1\u003e\n    \u003cp\u003eQuando Agent 1 invia il modello via A2A a \u003cstrong\u003e/webhook/agent2-start\u003c/strong\u003e, il flusso proseguir\u00e0 automaticamente.\u003c/p\u003e\n    \u003cdiv class=\"pulse\"\u003e\u003c/div\u003e\n  \u003c/div\u003e\n\u003c/body\u003e\n\u003c/html\u003e"
-                                     },
-                      "id":  "wait-a2a",
-                      "name":  "Attesa A2A",
-                      "type":  "n8n-nodes-base.respondToWebhook",
-                      "typeVersion":  1.1,
-                      "position":  [
-                                       1260,
-                                       380
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "options":  {
-
-                                                     },
-                                         "responseBody":  "=\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003ctitle\u003eScegli Metodo\u003c/title\u003e\n  \u003cstyle\u003e\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body {\n      font-family: \"Segoe UI\", Tahoma, Geneva, Verdana, sans-serif;\n      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);\n      min-height: 100vh;\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      padding: 20px;\n      color: #0f172a;\n    }\n    .container {\n      background: white;\n      width: 100%;\n      max-width: 720px;\n      border-radius: 18px;\n      padding: 40px;\n      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);\n    }\n    h1 { font-size: 28px; margin-bottom: 12px; }\n    p { color: #475569; margin-bottom: 24px; line-height: 1.6; }\n    .actions { display: grid; gap: 14px; }\n    button {\n      padding: 16px 20px;\n      border-radius: 12px;\n      border: none;\n      font-size: 16px;\n      font-weight: 700;\n      cursor: pointer;\n      transition: transform 0.2s ease, box-shadow 0.2s ease;\n    }\n    .btn-a2a { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; }\n    .btn-local { background: linear-gradient(135deg, #14b8a6, #0f766e); color: white; }\n    button:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(15, 23, 42, 0.2); }\n    .note { margin-top: 18px; font-size: 13px; color: #64748b; }\n  \u003c/style\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n  \u003cdiv class=\"container\"\u003e\n    \u003ch1\u003eScegli il metodo di input\u003c/h1\u003e\n    \u003cp\u003eVuoi attendere il modello via A2A da Agent 1, oppure usare un file gi\u00e0 presente nella cartella input_agent?\u003c/p\u003e\n    \u003cdiv class=\"actions\"\u003e\n      \u003cbutton class=\"btn-a2a\" id=\"choose-a2a\"\u003eA2A (attendi Agent 1)\u003c/button\u003e\n      \u003cbutton class=\"btn-local\" id=\"choose-local\"\u003eUsa input locali\u003c/button\u003e\n    \u003c/div\u003e\n    \u003cdiv class=\"note\"\u003ePuoi tornare indietro ricaricando questa pagina.\u003c/div\u003e\n  \u003c/div\u003e\n\n  \u003cscript\u003e\n    async function postMode(mode) {\n      const res = await fetch('/webhook/agent2-start', {\n        method: 'POST',\n        headers: { 'Content-Type': 'application/json' },\n        body: JSON.stringify({ mode })\n      });\n      document.body.innerHTML = await res.text();\n    }\n    document.getElementById('choose-a2a').addEventListener('click', () => postMode('a2a'));\n    document.getElementById('choose-local').addEventListener('click', () => postMode('local'));\n  \u003c/script\u003e\n\u003c/body\u003e\n\u003c/html\u003e"
-                                     },
-                      "id":  "select-model",
-                      "name":  "Scegli Metodo",
-                      "type":  "n8n-nodes-base.respondToWebhook",
-                      "typeVersion":  1.1,
-                      "position":  [
-                                       900,
-                                       180
-                                   ]
+                    "leftValue": "={{ $json.requestType }}",
+                    "rightValue": "initial",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
-              ],
-    "connections":  {
-                        "START - Webhook Principale":  {
-                                                           "main":  [
-                                                                        [
-                                                                            {
-                                                                                "node":  "File Selezionato?",
-                                                                                "type":  "main",
-                                                                                "index":  0
-                                                                            }
-                                                                        ]
-                                                                    ]
-                                                       },
-                        "File Selezionato?":  {
-                                                  "main":  [
-                                                               [
-                                                                   {
-                                                                       "node":  "Leggi File Locale",
-                                                                       "type":  "main",
-                                                                       "index":  0
-                                                                   }
-                                                               ],
-                                                               [
-                                                                   {
-                                                                       "node":  "Prepara Dati",
-                                                                       "type":  "main",
-                                                                       "index":  0
-                                                                   }
-                                                               ]
-                                                           ]
-                                              },
-                        "Leggi File Locale":  {
-                                                  "main":  [
-                                                               [
-                                                                   {
-                                                                       "node":  "Imposta Modello da File",
-                                                                       "type":  "main",
-                                                                       "index":  0
-                                                                   }
-                                                               ]
-                                                           ]
-                                              },
-                        "Imposta Modello da File":  {
-                                                        "main":  [
-                                                                     [
-                                                                         {
-                                                                             "node":  "Prepara Dati",
-                                                                             "type":  "main",
-                                                                             "index":  0
-                                                                         }
-                                                                     ]
-                                                                 ]
-                                                    },
-                        "Prepara Dati":  {
-                                             "main":  [
-                                                          {
-                                                              "node":  "Modello Presente?",
-                                                              "type":  "main",
-                                                              "index":  0
-                                                          }
-                                                      ]
-                                         },
-                        "Max Iterazioni?":  {
-                                                "main":  [
-                                                             [
-                                                                 {
-                                                                     "node":  "Limite Iterazioni",
-                                                                     "type":  "main",
-                                                                     "index":  0
-                                                                 }
-                                                             ],
-                                                             [
-                                                                 {
-                                                                     "node":  "ANALIZZA (Iter. {{ $(\u0027Prepara Dati\u0027).item.json.iteration + 1 }})",
-                                                                     "type":  "main",
-                                                                     "index":  0
-                                                                 }
-                                                             ]
-                                                         ]
-                                            },
-                        "ANALIZZA (Iter. {{ $(\u0027Prepara Dati\u0027).item.json.iteration + 1 }})":  {
-                                                                                                           "main":  [
-                                                                                                                        [
-                                                                                                                            {
-                                                                                                                                "node":  "Combina Risultati con Contesto",
-                                                                                                                                "type":  "main",
-                                                                                                                                "index":  0
-                                                                                                                            }
-                                                                                                                        ]
-                                                                                                                    ]
-                                                                                                       },
-                        "Combina Risultati con Contesto":  {
-                                                               "main":  [
-                                                                            [
-                                                                                {
-                                                                                    "node":  "Modello Valido?",
-                                                                                    "type":  "main",
-                                                                                    "index":  0
-                                                                                }
-                                                                            ]
-                                                                        ]
-                                                           },
-                        "Modello Valido?":  {
-                                                "main":  [
-                                                             [
-                                                                 {
-                                                                     "node":  "Pagina Successo",
-                                                                     "type":  "main",
-                                                                     "index":  0
-                                                                 }
-                                                             ],
-                                                             [
-                                                                 {
-                                                                     "node":  "Form Domande HTML",
-                                                                     "type":  "main",
-                                                                     "index":  0
-                                                                 }
-                                                             ]
-                                                         ]
-                                            },
-                        "Modello Presente?":  {
-                                                  "main":  [
-                                                               [
-                                                                   {
-                                                                       "node":  "Max Iterazioni?",
-                                                                       "type":  "main",
-                                                                       "index":  0
-                                                                   }
-                                                               ],
-                                                               [
-                                                                   {
-                                                                       "node":  "Metodo Locale?",
-                                                                       "type":  "main",
-                                                                       "index":  0
-                                                                   }
-                                                               ]
-                                                           ]
-                                              },
-                        "Metodo Locale?":  {
-                                               "main":  [
-                                                            [
-                                                                {
-                                                                    "node":  "Lista File Locali",
-                                                                    "type":  "main",
-                                                                    "index":  0
-                                                                }
-                                                            ],
-                                                            [
-                                                                {
-                                                                    "node":  "Metodo A2A?",
-                                                                    "type":  "main",
-                                                                    "index":  0
-                                                                }
-                                                            ]
-                                                        ]
-                                           },
-                        "Lista File Locali":  {
-                                                  "main":  [
-                                                               [
-                                                                   {
-                                                                       "node":  "Seleziona Input Locale",
-                                                                       "type":  "main",
-                                                                       "index":  0
-                                                                   }
-                                                               ]
-                                                           ]
-                                              },
-                        "Metodo A2A?":  {
-                                            "main":  [
-                                                         [
-                                                             {
-                                                                 "node":  "Attesa A2A",
-                                                                 "type":  "main",
-                                                                 "index":  0
-                                                             }
-                                                         ],
-                                                         [
-                                                             {
-                                                                 "node":  "Scegli Metodo",
-                                                                 "type":  "main",
-                                                                 "index":  0
-                                                             }
-                                                         ]
-                                                     ]
-                                        },
-                        "Seleziona Input Locale":  {
-                                                       "main":  [
-
-                                                                ]
-                                                   },
-                        "Attesa A2A":  {
-                                           "main":  [
-
-                                                    ]
-                                       },
-                        "Scegli Metodo":  {
-                                               "main":  [
-
-                                                        ]
-                                           }
-                    },
-    "settings":  {
-                     "executionOrder":  "v1"
-                 },
-    "staticData":  null,
-    "tags":  [
-
-             ],
-    "triggerCount":  1,
-    "updatedAt":  "2025-12-18T17:00:00.000Z",
-    "versionId":  "1"
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": "initial"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.requestType }}",
+                    "rightValue": "local",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": "local"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.requestType }}",
+                    "rightValue": "file",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": "file"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.requestType }}",
+                    "rightValue": "a2a",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": "a2a"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.requestType }}",
+                    "rightValue": "answers",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": "answers"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      },
+      "id": "route",
+      "name": "Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        680,
+        400
+      ],
+      "notes": "Smista in 5 percorsi: initial, local, file, a2a, answers"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=<!DOCTYPE html>\n<html lang=\"it\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Agent 2 - Scegli Metodo</title>\n  <style>\n    *{margin:0;padding:0;box-sizing:border-box}\n    body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px;color:#0f172a}\n    .container{background:#fff;width:100%;max-width:720px;border-radius:18px;padding:48px 40px;box-shadow:0 24px 70px rgba(0,0,0,0.35);animation:fadeIn .5s}\n    @keyframes fadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}\n    h1{font-size:30px;margin-bottom:8px;color:#0f172a}\n    .subtitle{color:#475569;margin-bottom:32px;line-height:1.6;font-size:15px}\n    .actions{display:grid;gap:16px}\n    .btn{padding:20px 24px;border-radius:14px;border:none;font-size:17px;font-weight:700;cursor:pointer;transition:transform .2s,box-shadow .2s;text-align:left;display:flex;align-items:center;gap:16px}\n    .btn:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(15,23,42,0.2)}\n    .btn-local{background:linear-gradient(135deg,#14b8a6,#0f766e);color:#fff}\n    .btn-a2a{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff}\n    .btn-icon{font-size:28px;flex-shrink:0}\n    .btn-text strong{display:block;margin-bottom:2px}\n    .btn-text span{font-weight:400;font-size:13px;opacity:.85}\n    .footer{margin-top:28px;font-size:12px;color:#94a3b8;text-align:center}\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <h1>Agent 2 - Consistency Analyzer</h1>\n    <p class=\"subtitle\">Come vuoi fornire il modello di dominio DDD da analizzare?</p>\n    <div class=\"actions\">\n      <button class=\"btn btn-local\" id=\"choose-local\">\n        <span class=\"btn-icon\">&#128194;</span>\n        <span class=\"btn-text\"><strong>File locale</strong><span>Seleziona un file JSON dalla cartella input_agent</span></span>\n      </button>\n      <button class=\"btn btn-a2a\" id=\"choose-a2a\">\n        <span class=\"btn-icon\">&#128279;</span>\n        <span class=\"btn-text\"><strong>A2A Protocol</strong><span>Attendi il modello da Agent 1 via Agent-to-Agent</span></span>\n      </button>\n    </div>\n    <div class=\"footer\">Agent 2 - Consistency &amp; Conflict Analyzer | Powered by n8n + Ollama</div>\n  </div>\n  <script>\n    async function postMode(mode) {\n      const btn = event.currentTarget;\n      btn.style.opacity = '0.6';\n      btn.style.pointerEvents = 'none';\n      try {\n        const res = await fetch(window.location.href.replace('agent2-start', 'agent2-submit'), {\n          method: 'POST',\n          headers: { 'Content-Type': 'application/json' },\n          body: JSON.stringify({ mode })\n        });\n        document.open();\n        document.write(await res.text());\n        document.close();\n      } catch(e) {\n        alert('Errore di connessione: ' + e.message);\n        btn.style.opacity = '1';\n        btn.style.pointerEvents = 'auto';\n      }\n    }\n    document.getElementById('choose-local').addEventListener('click', () => postMode('local'));\n    document.getElementById('choose-a2a').addEventListener('click', () => postMode('a2a'));\n  </script>\n</body>\n</html>",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "choice-page",
+      "name": "Pagina Scelta",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        180
+      ],
+      "notes": "Pagina iniziale: scegli tra file locale o A2A"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://agent2-api:8002/source/files",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "get-files",
+      "name": "Lista File API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        340
+      ],
+      "notes": "Chiama GET /source/files per ottenere la lista dei JSON disponibili"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=<!DOCTYPE html>\n<html lang=\"it\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Seleziona File</title>\n  <style>\n    *{margin:0;padding:0;box-sizing:border-box}\n    body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:linear-gradient(135deg,#f0fdf4 0%,#d1fae5 100%);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px}\n    .container{background:#fff;width:100%;max-width:720px;border-radius:18px;padding:40px;box-shadow:0 24px 70px rgba(15,23,42,0.15)}\n    h1{font-size:24px;margin-bottom:6px;color:#065f46}\n    .subtitle{color:#475569;margin-bottom:24px;font-size:14px}\n    .file-list{display:grid;gap:10px}\n    .file-btn{padding:16px 20px;border-radius:12px;border:2px solid #d1fae5;background:#f0fdf4;color:#065f46;font-weight:600;font-size:15px;cursor:pointer;transition:all .2s;text-align:left;display:flex;justify-content:space-between;align-items:center}\n    .file-btn:hover{background:#065f46;color:#fff;border-color:#065f46;transform:translateY(-2px);box-shadow:0 8px 20px rgba(6,95,70,0.2)}\n    .file-btn .size{font-size:12px;opacity:.7;font-weight:400}\n    .empty{color:#64748b;font-style:italic;padding:20px;text-align:center}\n    .back{display:inline-block;margin-top:20px;color:#0f766e;text-decoration:none;font-size:13px;cursor:pointer}\n    .back:hover{text-decoration:underline}\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <h1>Seleziona un file da analizzare</h1>\n    <p class=\"subtitle\">File disponibili nella cartella input_agent:</p>\n    <div id=\"list\" class=\"file-list\">\n      {{ $json.files ? $json.files.map(f => '<button class=\"file-btn\" data-name=\"' + f.name + '\">' + f.name + '<span class=\"size\">' + (f.size ? Math.round(f.size/1024) + ' KB' : '') + '</span></button>').join('') : '<div class=\"empty\">Nessun file trovato.</div>' }}\n    </div>\n    <a class=\"back\" id=\"go-back\">&#8592; Torna alla scelta</a>\n  </div>\n  <script>\n    document.querySelectorAll('.file-btn').forEach(btn => {\n      btn.addEventListener('click', async () => {\n        const name = btn.dataset.name;\n        btn.textContent = 'Caricamento...';\n        btn.style.opacity = '0.6';\n        document.querySelectorAll('.file-btn').forEach(b => b.style.pointerEvents = 'none');\n        try {\n          const res = await fetch(window.location.href.replace('agent2-start', 'agent2-submit'), {\n            method: 'POST',\n            headers: { 'Content-Type': 'application/json' },\n            body: JSON.stringify({ file_name: name })\n          });\n          document.open();\n          document.write(await res.text());\n          document.close();\n        } catch(e) {\n          alert('Errore: ' + e.message);\n          location.reload();\n        }\n      });\n    });\n    document.getElementById('go-back').addEventListener('click', async () => {\n      try {\n        const res = await fetch(window.location.href.replace('agent2-start', 'agent2-submit'), {\n          method: 'POST',\n          headers: { 'Content-Type': 'application/json' },\n          body: JSON.stringify({})\n        });\n        document.open();\n        document.write(await res.text());\n        document.close();\n      } catch(e) { location.reload(); }\n    });\n  </script>\n</body>\n</html>",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "file-selector",
+      "name": "Seleziona File",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1140,
+        340
+      ],
+      "notes": "Mostra la lista dei file come bottoni cliccabili"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://agent2-api:8002/source/file?name={{ encodeURIComponent($json.file_name) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "load-file",
+      "name": "Carica File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        500
+      ],
+      "notes": "Chiama GET /source/file?name=... per caricare il contenuto JSON"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nlet domain_model, iteration, max_iterations, session_id, previous_answers;\n\n// Check if this is the 'answers' path (loop iteration)\nif (input.domain_model_b64) {\n  // Decode base64 domain model from form\n  const decoded = Buffer.from(input.domain_model_b64, 'base64').toString('utf-8');\n  domain_model = JSON.parse(decoded);\n  iteration = parseInt(input.iteration) || 0;\n  max_iterations = parseInt(input.max_iterations) || 5;\n  session_id = input.session_id || new Date().toISOString();\n  previous_answers = input.answers || {};\n} else if (input.domain_model) {\n  // Direct A2A submission with domain_model in body\n  domain_model = typeof input.domain_model === 'string' ? JSON.parse(input.domain_model) : input.domain_model;\n  iteration = 0;\n  max_iterations = 5;\n  session_id = new Date().toISOString();\n  previous_answers = {};\n} else {\n  // File loaded via HTTP - the entire response IS the domain model\n  domain_model = input;\n  iteration = 0;\n  max_iterations = 5;\n  session_id = new Date().toISOString();\n  previous_answers = {};\n}\n\nreturn [{\n  json: {\n    domain_model: JSON.stringify(domain_model),\n    iteration,\n    max_iterations,\n    session_id,\n    previous_answers: JSON.stringify(previous_answers),\n    use_llm: true,\n    apply_auto_fixes: true\n  }\n}];"
+      },
+      "id": "prepare-data",
+      "name": "Prepara Dati",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        560
+      ],
+      "notes": "Normalizza i dati per l'analisi.\nGestisce sia prima iterazione (da file) che loop (da answers con base64)."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-iter",
+              "leftValue": "={{ $json.iteration }}",
+              "rightValue": "={{ $json.max_iterations }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-max-iter",
+      "name": "Max Iterazioni?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1360,
+        560
+      ],
+      "notes": "Se iteration >= max_iterations -> Limite raggiunto\nAltrimenti -> Analizza"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://agent2-api:8002/analyze",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  domain_model: JSON.parse($json.domain_model),\n  use_llm: $json.use_llm,\n  apply_auto_fixes: $json.apply_auto_fixes,\n  previous_answers: JSON.parse($json.previous_answers)\n}) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "analyze-api",
+      "name": "Analizza Modello",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1580,
+        620
+      ],
+      "notes": "POST /analyze - Analisi completa del modello DDD.\nTimeout 3 minuti per dare tempo all'LLM."
+    },
+    {
+      "parameters": {
+        "jsCode": "const apiResult = $input.first().json;\nconst prepData = $('Prepara Dati').first().json;\n\nconst questions = apiResult.follow_up_questions || [];\nconst refinedModel = apiResult.refined_model || {};\nconst domainModelStr = Object.keys(refinedModel).length > 0 ? JSON.stringify(refinedModel) : prepData.domain_model;\nconst domainModelB64 = Buffer.from(domainModelStr).toString('base64');\n\n// On first iteration, use LLM-suggested max_iterations from API; otherwise keep existing\nconst maxIter = (prepData.iteration === 0 && apiResult.suggested_max_iterations)\n  ? apiResult.suggested_max_iterations\n  : prepData.max_iterations;\n\n// Pre-render questions HTML\nlet qHtml = '';\nqHtml += '<input type=\"hidden\" name=\"session_id\" value=\"' + prepData.session_id + '\">';\nqHtml += '<input type=\"hidden\" name=\"iteration\" value=\"' + (prepData.iteration + 1) + '\">';\nqHtml += '<input type=\"hidden\" name=\"max_iterations\" value=\"' + maxIter + '\">';\nqHtml += '<input type=\"hidden\" id=\"domain_model_b64\" name=\"domain_model_b64\" value=\"' + domainModelB64 + '\">';\nqHtml += '<input type=\"hidden\" id=\"question_count\" value=\"' + questions.length + '\">';\nquestions.forEach((q, i) => {\n  const sev = q.severity || 'MEDIUM';\n  qHtml += '<div class=\"q-block\">';\n  qHtml += '<div class=\"q-num\">' + (i+1) + '</div>';\n  qHtml += '<div class=\"q-label\">' + (q.question || '') + ' <span class=\"severity sev-' + sev + '\">' + sev + '</span></div>';\n  if (q.context) qHtml += '<div class=\"context-info\">' + q.context + '</div>';\n  if (q.suggested_answers && q.suggested_answers.length > 0) {\n    qHtml += '<div class=\"options-group\" data-q=\"' + i + '\">';\n    q.suggested_answers.forEach((sa) => {\n      const saEsc = String(sa).replace(/\"/g, '&quot;');\n      qHtml += '<label class=\"option-label\"><input type=\"radio\" name=\"q' + i + '\" value=\"' + saEsc + '\"> ' + sa + '</label>';\n    });\n    qHtml += '<label class=\"option-label\"><input type=\"radio\" name=\"q' + i + '\" value=\"__custom__\"> Altro (testo libero)</label>';\n    qHtml += '</div>';\n    qHtml += '<textarea class=\"custom-area\" name=\"q' + i + '_custom\" placeholder=\"Scrivi la tua risposta personalizzata...\"></textarea>';\n  } else {\n    qHtml += '<textarea class=\"freetext\" name=\"q' + i + '\" placeholder=\"Scrivi la tua risposta...\" required></textarea>';\n  }\n  qHtml += '</div>';\n});\nif (questions.length === 0) {\n  qHtml += '<p style=\"text-align:center;color:#6b7280;padding:20px\">Nessuna domanda generata. Il modello potrebbe necessitare di una revisione manuale.</p>';\n}\n\nreturn [{\n  json: {\n    session_id: prepData.session_id,\n    iteration: prepData.iteration,\n    max_iterations: maxIter,\n    domain_model: prepData.domain_model,\n    domain_model_b64: domainModelB64,\n    status: apiResult.status,\n    follow_up_questions: JSON.stringify(questions),\n    refined_model: JSON.stringify(refinedModel),\n    summary: JSON.stringify(apiResult.summary || {}),\n    semantic_issues: JSON.stringify(apiResult.semantic_issues || []),\n    conflict_issues: JSON.stringify(apiResult.conflict_issues || []),\n    questions_html: qHtml\n  }\n}];"
+      },
+      "id": "merge-context",
+      "name": "Combina Risultati",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        620
+      ],
+      "notes": "Unisce i risultati dell'analisi API con il contesto della sessione"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-valid",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "VALID",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-valid",
+      "name": "Modello Valido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2020,
+        620
+      ],
+      "notes": "VALID -> Successo | ISSUES_FOUND -> Form domande"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=<!DOCTYPE html>\n<html lang=\"it\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Modello DDD Validato!</title>\n  <style>\n    *{margin:0;padding:0;box-sizing:border-box}\n    body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:linear-gradient(135deg,#10b981 0%,#059669 100%);min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:40px 20px}\n    .container{background:#fff;max-width:900px;width:100%;border-radius:20px;padding:60px 40px;box-shadow:0 30px 90px rgba(0,0,0,0.4);animation:fadeIn .6s}\n    @keyframes fadeIn{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}\n    .top-section{text-align:center}\n    .icon{font-size:100px;margin-bottom:24px}\n    h1{color:#059669;font-size:36px;margin-bottom:16px}\n    .message{color:#6b7280;line-height:1.8;margin-bottom:28px;font-size:16px}\n    .stats{background:linear-gradient(135deg,#f0fdf4 0%,#d1fae5 100%);border-radius:15px;padding:30px;margin:30px 0;text-align:left;border:2px solid #a7f3d0}\n    .stat-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #a7f3d0}\n    .stat-row:last-child{border-bottom:none}\n    .stat-label{color:#065f46;font-weight:600;font-size:15px}\n    .stat-value{color:#059669;font-weight:700;font-size:17px}\n    .output-section{margin-top:32px;text-align:left}\n    .output-section h2{color:#065f46;font-size:22px;margin-bottom:16px;display:flex;align-items:center;gap:10px}\n    .model-actions{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}\n    .btn{display:inline-block;padding:14px 32px;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px;transition:all .3s;margin:0;border:none;cursor:pointer}\n    .btn-primary{background:linear-gradient(135deg,#10b981,#059669);color:#fff}\n    .btn-download{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff}\n    .btn-copy{background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff}\n    .btn-toggle{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff}\n    .btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,0.2)}\n    .btn-sm{padding:10px 20px;font-size:13px}\n    .model-preview{background:#0f172a;border-radius:12px;padding:24px;max-height:500px;overflow:auto;display:none;margin-bottom:20px;position:relative}\n    .model-preview.visible{display:block}\n    .model-preview pre{color:#e2e8f0;font-family:'Cascadia Code','Fira Code',Consolas,monospace;font-size:13px;line-height:1.6;margin:0;white-space:pre-wrap;word-break:break-word}\n    .model-preview .json-key{color:#7dd3fc}\n    .model-preview .json-str{color:#86efac}\n    .model-preview .json-num{color:#fbbf24}\n    .model-preview .json-bool{color:#f472b6}\n    .model-preview .json-null{color:#94a3b8}\n    .copy-toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#065f46;color:#fff;padding:12px 28px;border-radius:10px;font-weight:600;font-size:14px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:100}\n    .copy-toast.show{opacity:1}\n    .actions-bottom{text-align:center;margin-top:28px;display:flex;justify-content:center;gap:12px;flex-wrap:wrap}\n    .footer{text-align:center;margin-top:28px;color:#9ca3af;font-size:12px}\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"top-section\">\n      <div class=\"icon\">&#9989;</div>\n      <h1>Modello DDD Validato!</h1>\n      <p class=\"message\">\n        <strong>Complimenti!</strong> Dopo <strong>{{ $json.iteration + 1 }}</strong> {{ $json.iteration === 0 ? 'iterazione' : 'iterazioni' }} di analisi,<br>\n        il modello Domain-Driven Design e' ora <strong>completo e coerente</strong>.\n      </p>\n    </div>\n    <div class=\"stats\">\n      <div class=\"stat-row\">\n        <span class=\"stat-label\">Iterazioni completate</span>\n        <span class=\"stat-value\">{{ $json.iteration + 1 }}</span>\n      </div>\n      <div class=\"stat-row\">\n        <span class=\"stat-label\">Status finale</span>\n        <span class=\"stat-value\">VALID</span>\n      </div>\n      <div class=\"stat-row\">\n        <span class=\"stat-label\">Session ID</span>\n        <span class=\"stat-value\" style=\"font-size:11px;font-family:monospace\">{{ $json.session_id }}</span>\n      </div>\n    </div>\n    <div class=\"output-section\">\n      <h2>Modello Raffinato (Output)</h2>\n      <div class=\"model-actions\">\n        <button class=\"btn btn-download btn-sm\" id=\"downloadBtn\">Scarica JSON</button>\n        <button class=\"btn btn-copy btn-sm\" id=\"copyBtn\">Copia negli appunti</button>\n        <button class=\"btn btn-toggle btn-sm\" id=\"toggleBtn\">Mostra/Nascondi JSON</button>\n      </div>\n      <div class=\"model-preview\" id=\"modelPreview\"><pre id=\"modelJson\"></pre></div>\n    </div>\n    <div class=\"actions-bottom\">\n      <a href=\"/\" class=\"btn btn-primary\">Torna a n8n</a>\n    </div>\n    <div class=\"footer\">Agent 2 - Consistency &amp; Conflict Analyzer | Powered by n8n + Ollama</div>\n  </div>\n  <div class=\"copy-toast\" id=\"toast\">Copiato negli appunti!</div>\n  <script>\n    const modelStr = JSON.stringify(JSON.parse(atob('{{ $json.domain_model_b64 }}')), null, 2);\n    function syntaxHighlight(json) {\n      return json.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')\n        .replace(/(\"(\\\\u[a-zA-Z0-9]{4}|\\\\[^u]|[^\\\\\"])*\")(\\s*:)?/g, function(match, p1, p2, p3) {\n          if (p3) return '<span class=\"json-key\">' + p1 + '</span>' + p3;\n          return '<span class=\"json-str\">' + p1 + '</span>';\n        })\n        .replace(/\\b(true|false)\\b/g, '<span class=\"json-bool\">$1</span>')\n        .replace(/\\bnull\\b/g, '<span class=\"json-null\">null</span>')\n        .replace(/\\b(-?\\d+\\.?\\d*)\\b/g, '<span class=\"json-num\">$1</span>');\n    }\n    document.getElementById('modelJson').innerHTML = syntaxHighlight(modelStr);\n    document.getElementById('toggleBtn').addEventListener('click', function() {\n      document.getElementById('modelPreview').classList.toggle('visible');\n    });\n    document.getElementById('downloadBtn').addEventListener('click', function() {\n      const blob = new Blob([modelStr], {type:'application/json'});\n      const url = URL.createObjectURL(blob);\n      const a = document.createElement('a');\n      a.href = url;\n      a.download = 'refined_model.json';\n      a.click();\n      URL.revokeObjectURL(url);\n    });\n    document.getElementById('copyBtn').addEventListener('click', function() {\n      navigator.clipboard.writeText(modelStr).then(function() {\n        const t = document.getElementById('toast');\n        t.classList.add('show');\n        setTimeout(function(){ t.classList.remove('show'); }, 2000);\n      });\n    });\n  </script>\n</body>\n</html>",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "success-page",
+      "name": "Pagina Successo",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2260,
+        500
+      ],
+      "notes": "Pagina finale di successo - modello validato"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=<!DOCTYPE html>\n<html lang=\"it\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Limite Iterazioni</title>\n  <style>\n    *{margin:0;padding:0;box-sizing:border-box}\n    body{font-family:'Segoe UI',Tahoma,sans-serif;background:linear-gradient(135deg,#fecaca,#fee2e2);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px}\n    .container{background:#fff;max-width:640px;padding:50px 40px;border-radius:18px;text-align:center;border:3px solid #ef4444;box-shadow:0 20px 60px rgba(0,0,0,0.15)}\n    .icon{font-size:80px;margin-bottom:20px}\n    h1{color:#dc2626;font-size:28px;margin-bottom:12px}\n    p{color:#6b7280;line-height:1.7;margin-bottom:16px;font-size:15px}\n    .btn{display:inline-block;margin-top:16px;padding:12px 28px;background:#dc2626;color:#fff;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px}\n    .btn:hover{background:#b91c1c}\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"icon\">&#9888;&#65039;</div>\n    <h1>Limite Iterazioni Raggiunto</h1>\n    <p>Dopo <strong>{{ $json.max_iterations }}</strong> iterazioni il modello presenta ancora problemi che richiedono un intervento manuale piu' approfondito.</p>\n    <p>Prova a rivedere il modello di dominio originale e riesegui l'analisi.</p>\n    <a href=\"/\" class=\"btn\">Torna a n8n</a>\n  </div>\n</body>\n</html>",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "max-iter-page",
+      "name": "Limite Iterazioni",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1580,
+        460
+      ],
+      "notes": "Mostra errore: troppe iterazioni senza raggiungere VALID"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=<!DOCTYPE html>\n<html lang=\"it\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Agent 2 - Domande di Validazione</title>\n  <style>\n    *{margin:0;padding:0;box-sizing:border-box}\n    body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;padding:20px;display:flex;justify-content:center;align-items:flex-start;padding-top:40px}\n    .container{background:#fff;max-width:900px;width:100%;border-radius:20px;box-shadow:0 30px 90px rgba(0,0,0,0.4);overflow:hidden;animation:slideIn .5s}\n    @keyframes slideIn{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}\n    .header{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:36px 40px;text-align:center}\n    .header h1{font-size:28px;margin-bottom:8px}\n    .header p{opacity:.9;font-size:14px}\n    .content{padding:40px}\n    .iter-badge{display:inline-block;background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#78350f;padding:6px 18px;border-radius:20px;font-size:13px;font-weight:700;margin-bottom:22px}\n    .summary{background:linear-gradient(135deg,#fef3c7,#fde68a);border-left:5px solid #f59e0b;padding:18px;margin-bottom:30px;border-radius:8px}\n    .summary h3{color:#78350f;margin-bottom:12px;font-size:16px}\n    .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}\n    .summary-item{background:#fff;padding:8px 14px;border-radius:6px;font-size:13px}\n    .summary-item strong{color:#92400e}\n    .q-block{background:linear-gradient(135deg,#f9fafb,#f3f4f6);border:2px solid #e5e7eb;border-radius:12px;padding:28px;margin-bottom:26px;transition:all .3s;position:relative}\n    .q-block:hover{border-color:#667eea;box-shadow:0 6px 20px rgba(102,126,234,0.12)}\n    .q-num{position:absolute;top:-14px;left:18px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;box-shadow:0 4px 12px rgba(102,126,234,0.3)}\n    .q-label{font-weight:600;color:#1f2937;margin-bottom:14px;margin-top:8px;font-size:16px;line-height:1.5}\n    .severity{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;margin-left:8px;font-weight:700;vertical-align:middle}\n    .sev-CRITICAL{background:#fee2e2;color:#991b1b}\n    .sev-HIGH{background:#fed7aa;color:#9a3412}\n    .sev-MEDIUM{background:#fef3c7;color:#78350f}\n    .sev-LOW{background:#dbeafe;color:#1e40af}\n    .context-info{font-size:12px;color:#6b7280;margin-bottom:12px;padding:8px 12px;background:#fff;border-radius:6px;border:1px solid #e5e7eb}\n    .options-group{margin-top:10px}\n    .option-label{display:block;padding:10px 14px;margin-bottom:6px;border:2px solid #e5e7eb;border-radius:10px;cursor:pointer;transition:all .2s;font-size:14px;line-height:1.4}\n    .option-label:hover{border-color:#667eea;background:#f5f3ff}\n    .option-label input[type=radio]{margin-right:10px;accent-color:#667eea}\n    .option-label.selected{border-color:#667eea;background:#ede9fe}\n    .custom-area{width:100%;padding:14px;border:2px solid #d1d5db;border-radius:10px;font-size:14px;font-family:inherit;resize:vertical;min-height:80px;transition:all .3s;margin-top:8px;display:none}\n    .custom-area:focus{outline:none;border-color:#667eea;box-shadow:0 0 0 3px rgba(102,126,234,0.1)}\n    .custom-area.visible{display:block}\n    textarea.freetext{width:100%;padding:14px;border:2px solid #d1d5db;border-radius:10px;font-size:14px;font-family:inherit;resize:vertical;min-height:100px;transition:all .3s}\n    textarea.freetext:focus{outline:none;border-color:#667eea;box-shadow:0 0 0 3px rgba(102,126,234,0.1)}\n    .submit-btn{width:100%;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;padding:18px;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;transition:all .3s;margin-top:24px;box-shadow:0 8px 20px rgba(102,126,234,0.3)}\n    .submit-btn:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(102,126,234,0.4)}\n    .submit-btn:disabled{opacity:.6;cursor:not-allowed;transform:none}\n    .footer{text-align:center;padding:20px;color:#9ca3af;font-size:12px;border-top:1px solid #e5e7eb;background:#f9fafb}\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>Agent 2 - Validazione DDD</h1>\n      <p>Rispondi alle domande per raffinare il modello collaborativamente</p>\n    </div>\n    <div class=\"content\">\n      <div class=\"iter-badge\">Iterazione {{ $json.iteration + 1 }} di {{ $json.max_iterations }}</div>\n      <div class=\"summary\">\n        <h3>Riepilogo Problemi</h3>\n        <div class=\"summary-grid\">\n          <div class=\"summary-item\"><strong>{{ JSON.parse($json.summary).total_issues || 0 }}</strong> Problemi totali</div>\n          <div class=\"summary-item\"><strong>{{ JSON.parse($json.summary).entity_overlaps || 0 }}</strong> Entity overlaps</div>\n          <div class=\"summary-item\"><strong>{{ JSON.parse($json.summary).requirement_conflicts || 0 }}</strong> Conflitti requisiti</div>\n          <div class=\"summary-item\"><strong>{{ JSON.parse($json.summary).auto_fixed || 0 }}</strong> Auto-corretti</div>\n        </div>\n      </div>\n      <form id=\"answersForm\">\n        {{ $json.questions_html }}\n        <button type=\"submit\" class=\"submit-btn\" id=\"submitBtn\">Invia Risposte e Continua Raffinamento</button>\n      </form>\n    </div>\n    <div class=\"footer\">Agent 2 - Consistency &amp; Conflict Analyzer | Powered by n8n + Ollama + Llama3</div>\n  </div>\n  <script>\n    // Radio button selection highlighting and custom textarea toggle\n    document.querySelectorAll('.option-label input[type=radio]').forEach(radio => {\n      radio.addEventListener('change', function() {\n        const group = this.closest('.options-group');\n        group.querySelectorAll('.option-label').forEach(l => l.classList.remove('selected'));\n        this.closest('.option-label').classList.add('selected');\n        const customArea = group.nextElementSibling;\n        if (customArea && customArea.classList.contains('custom-area')) {\n          if (this.value === '__custom__') {\n            customArea.classList.add('visible');\n            customArea.focus();\n          } else {\n            customArea.classList.remove('visible');\n          }\n        }\n      });\n    });\n\n    // Form submission\n    document.getElementById('answersForm').addEventListener('submit', async function(e) {\n      e.preventDefault();\n      const form = this;\n      const btn = document.getElementById('submitBtn');\n      const questionCount = parseInt(document.getElementById('question_count').value);\n\n      // Collect answers\n      const answers = {};\n      for (let i = 0; i < questionCount; i++) {\n        const radio = form.querySelector('input[name=\"q' + i + '\"]:checked');\n        if (radio) {\n          if (radio.value === '__custom__') {\n            const customVal = form.querySelector('textarea[name=\"q' + i + '_custom\"]').value.trim();\n            if (!customVal) { alert('Inserisci la risposta personalizzata per la domanda ' + (i+1)); return; }\n            answers['q' + i] = customVal;\n          } else {\n            answers['q' + i] = radio.value;\n          }\n        } else {\n          const textarea = form.querySelector('textarea[name=\"q' + i + '\"]');\n          if (textarea) {\n            if (!textarea.value.trim()) { alert('Rispondi alla domanda ' + (i+1)); return; }\n            answers['q' + i] = textarea.value.trim();\n          }\n        }\n      }\n\n      // Disable form\n      btn.textContent = 'Elaborazione in corso...';\n      btn.disabled = true;\n      form.querySelectorAll('input,textarea').forEach(el => el.disabled = true);\n\n      const data = {\n        session_id: form.querySelector('[name=session_id]').value,\n        iteration: parseInt(form.querySelector('[name=iteration]').value),\n        max_iterations: parseInt(form.querySelector('[name=max_iterations]').value),\n        domain_model_b64: form.querySelector('[name=domain_model_b64]').value,\n        answers: answers\n      };\n\n      try {\n        const res = await fetch(window.location.href.replace('agent2-start', 'agent2-submit'), {\n          method: 'POST',\n          headers: { 'Content-Type': 'application/json' },\n          body: JSON.stringify(data)\n        });\n        if (res.ok) {\n          document.open();\n          document.write(await res.text());\n          document.close();\n        } else {\n          throw new Error('HTTP ' + res.status);\n        }\n      } catch(err) {\n        alert('Errore: ' + err.message);\n        btn.textContent = 'Invia Risposte e Continua Raffinamento';\n        btn.disabled = false;\n        form.querySelectorAll('input,textarea').forEach(el => el.disabled = false);\n      }\n    });\n  </script>\n</body>\n</html>",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "questions-form",
+      "name": "Form Domande",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2260,
+        740
+      ],
+      "notes": "Form HTML con radio buttons per suggested_answers + textarea per risposte libere.\nDomain model codificato in base64 per sicurezza."
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=<!DOCTYPE html>\n<html lang=\"it\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>In Attesa di Agent 1</title>\n  <style>\n    *{margin:0;padding:0;box-sizing:border-box}\n    body{font-family:'Segoe UI',Tahoma,sans-serif;background:radial-gradient(circle at top,#0f172a,#020617);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px;color:#fff}\n    .panel{background:rgba(15,23,42,0.85);border:1px solid rgba(148,163,184,0.2);border-radius:18px;padding:48px 40px;max-width:640px;text-align:center;box-shadow:0 24px 70px rgba(2,6,23,0.6)}\n    h1{font-size:26px;margin-bottom:14px}\n    p{color:#cbd5e1;line-height:1.7;font-size:15px}\n    .pulse-container{margin:28px auto 0;display:flex;justify-content:center;gap:12px}\n    .pulse-dot{width:14px;height:14px;border-radius:50%;background:#38bdf8;animation:pulse 1.4s infinite}\n    .pulse-dot:nth-child(2){animation-delay:.2s}\n    .pulse-dot:nth-child(3){animation-delay:.4s}\n    @keyframes pulse{0%,100%{transform:scale(.8);opacity:.5}50%{transform:scale(1.2);opacity:1}}\n    .info{margin-top:28px;padding:16px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.2);border-radius:10px;font-size:13px;color:#7dd3fc}\n    code{background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:12px}\n  </style>\n</head>\n<body>\n  <div class=\"panel\">\n    <h1>In attesa del modello da Agent 1</h1>\n    <p>Agent 2 e' pronto e in ascolto.<br>Quando Agent 1 invia il modello via A2A Protocol, l'analisi partira' automaticamente.</p>\n    <div class=\"pulse-container\">\n      <div class=\"pulse-dot\"></div>\n      <div class=\"pulse-dot\"></div>\n      <div class=\"pulse-dot\"></div>\n    </div>\n    <div class=\"info\">\n      Endpoint A2A: <code>POST /a2a/message/send</code><br>\n      Webhook: <code>POST /webhook/agent2-start</code> con <code>{\"domain_model\": {...}}</code>\n    </div>\n  </div>\n</body>\n</html>",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "a2a-wait",
+      "name": "Attesa A2A",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        660
+      ],
+      "notes": "Pagina di attesa per il modello da Agent 1 via A2A Protocol"
+    }
+  ],
+  "connections": {
+    "START": {
+      "main": [
+        [
+          {
+            "node": "Pagina Scelta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SUBMIT": {
+      "main": [
+        [
+          {
+            "node": "Detect Request Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Request Type": {
+      "main": [
+        [
+          {
+            "node": "Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route": {
+      "main": [
+        [
+          {
+            "node": "Pagina Scelta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lista File API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Carica File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Attesa A2A",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepara Dati",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lista File API": {
+      "main": [
+        [
+          {
+            "node": "Seleziona File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carica File": {
+      "main": [
+        [
+          {
+            "node": "Prepara Dati",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepara Dati": {
+      "main": [
+        [
+          {
+            "node": "Max Iterazioni?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Max Iterazioni?": {
+      "main": [
+        [
+          {
+            "node": "Limite Iterazioni",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Analizza Modello",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analizza Modello": {
+      "main": [
+        [
+          {
+            "node": "Combina Risultati",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combina Risultati": {
+      "main": [
+        [
+          {
+            "node": "Modello Valido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modello Valido?": {
+      "main": [
+        [
+          {
+            "node": "Pagina Successo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Form Domande",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 2,
+  "updatedAt": "2026-02-12T12:00:00.000Z",
+  "versionId": "2"
 }
-

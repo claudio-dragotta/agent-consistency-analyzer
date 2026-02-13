@@ -3,13 +3,19 @@ Model Refiner Service
 
 Applies corrections and suggestions to produce a refined domain model
 ready for Agent 3 (Specification Generator).
+
+Uses LLM to interpret user answers and apply concrete model changes.
 """
 
 import logging
 import copy
+import json
+import re
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
+
+import httpx
 
 from app.config import Settings, get_settings
 from app.services.semantic_analyzer import SemanticIssue, IssueType
@@ -30,7 +36,7 @@ class Refinement:
     affected_path: str  # JSON path to affected element
     original_value: Any
     new_value: Any
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -53,7 +59,7 @@ class RefinementReport:
     requires_manual: int
     refinements: List[Refinement]
     unresolved_issues: List[str]
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -68,165 +74,124 @@ class RefinementReport:
 class ModelRefiner:
     """
     Applies corrections and refinements to domain models.
-    
+
+    Uses LLM to interpret user answers and apply concrete changes.
     Produces a refined model for Agent 3 with:
     - Automatic fixes for clear violations
-    - Annotations for manual resolution
-    - Metadata about applied changes
+    - LLM-interpreted user decisions
+    - Annotations for unresolved issues
     """
-    
+
     def __init__(self, settings: Optional[Settings] = None):
-        """
-        Initialize the model refiner.
-        
-        Args:
-            settings: Application settings (uses global if not provided)
-        """
         self.settings = settings or get_settings()
         self._refinement_counter = 0
-    
+
+    async def _call_ollama(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+        """Call Ollama API for LLM-based interpretation."""
+        url = self.settings.get_ollama_generate_url()
+        payload = {
+            "model": self.settings.OLLAMA_MODEL,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": 0.2,
+                "num_predict": 2048
+            }
+        }
+        if system_prompt:
+            payload["system"] = system_prompt
+
+        async with httpx.AsyncClient(timeout=self.settings.OLLAMA_TIMEOUT) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            result = response.json()
+            return result.get("response", "")
+
     def _get_next_refinement_id(self) -> str:
         """Generate next refinement ID."""
         self._refinement_counter += 1
         return f"REF-{self._refinement_counter:03d}"
-    
+
     def _deep_copy_model(self, model: Dict[str, Any]) -> Dict[str, Any]:
         """Create a deep copy of the domain model."""
         return copy.deepcopy(model)
-    
+
+    # ─── Model element finders ───────────────────────────────────────
+
     def _find_entity_in_model(
-        self,
-        model: Dict[str, Any],
-        entity_name: str,
-        context_name: Optional[str] = None
+        self, model: Dict[str, Any], entity_name: str, context_name: Optional[str] = None
     ) -> Tuple[Optional[Dict], str]:
-        """
-        Find an entity in the model by name and optionally context.
-        
-        Returns:
-            Tuple of (entity dict, JSON path)
-        """
+        """Find an entity in the model by name and optionally context."""
         domain_map = model.get("domainMap", {})
-        
         for domain_type in ["coreDomains", "supportingDomains", "genericDomains"]:
             domains = domain_map.get(domain_type, [])
             for i, domain in enumerate(domains):
                 context = domain.get("boundedContext", {}).get("name", "")
-                
                 if context_name and context != context_name:
                     continue
-                
                 for j, entity in enumerate(domain.get("entities", [])):
                     if entity.get("name", "").lower() == entity_name.lower():
                         path = f"domainMap.{domain_type}[{i}].entities[{j}]"
                         return entity, path
-        
         return None, ""
-    
+
     def _find_event_in_model(
-        self,
-        model: Dict[str, Any],
-        event_name: str
+        self, model: Dict[str, Any], event_name: str
     ) -> Tuple[Optional[Dict], str, int]:
-        """
-        Find an event in the model by name.
-        
-        Returns:
-            Tuple of (event dict, JSON path, index)
-        """
+        """Find an event in the model by name."""
         events = model.get("eventDrivenModel", {}).get("domainEvents", [])
-        
         for i, event in enumerate(events):
             if event.get("name", "").lower() == event_name.lower():
                 return event, f"eventDrivenModel.domainEvents[{i}]", i
-        
         return None, "", -1
-    
+
     def _find_domain_in_model(
-        self,
-        model: Dict[str, Any],
-        domain_name: str
+        self, model: Dict[str, Any], domain_name: str
     ) -> Tuple[Optional[Dict], str, str]:
-        """
-        Find a domain in the model by name.
-        
-        Returns:
-            Tuple of (domain dict, JSON path, domain type)
-        """
+        """Find a domain in the model by name."""
         domain_map = model.get("domainMap", {})
-        
         for domain_type in ["coreDomains", "supportingDomains", "genericDomains"]:
             domains = domain_map.get(domain_type, [])
             for i, domain in enumerate(domains):
                 if domain.get("name", "").lower() == domain_name.lower():
                     return domain, f"domainMap.{domain_type}[{i}]", domain_type
-        
         return None, "", ""
-    
-    def fix_naming_violation(
-        self,
-        model: Dict[str, Any],
-        event_name: str
-    ) -> Optional[Refinement]:
-        """
-        Auto-fix naming violation by converting event name to past tense.
-        
-        Args:
-            model: The domain model (modified in place)
-            event_name: Name of the event to fix
-            
-        Returns:
-            Refinement record if fix was applied
-        """
+
+    # ─── Auto-fix methods ────────────────────────────────────────────
+
+    def fix_naming_violation(self, model: Dict[str, Any], event_name: str) -> Optional[Refinement]:
+        """Auto-fix naming violation by converting event name to past tense."""
         event, path, idx = self._find_event_in_model(model, event_name)
-        
         if not event:
             return None
-        
         old_name = event["name"]
-        
-        # Convert to past tense
-        new_name = old_name
         if old_name.endswith("e"):
             new_name = old_name + "d"
-        elif old_name.endswith(("y",)):
+        elif old_name.endswith("y"):
             new_name = old_name[:-1] + "ied"
         else:
             new_name = old_name + "ed"
-        
-        # Apply fix
         event["name"] = new_name
-        
         return Refinement(
             refinement_id=self._get_next_refinement_id(),
             refinement_type="auto",
-            description=f"Renamed event from '{old_name}' to '{new_name}' (past tense)",
+            description=f"Rinominato evento da '{old_name}' a '{new_name}' (tempo passato)",
             applied=True,
             source_issue_type="NAMING_VIOLATION",
             affected_path=path,
             original_value=old_name,
             new_value=new_name
         )
-    
-    def annotate_entity_overlap(
-        self,
-        model: Dict[str, Any],
-        issue: SemanticIssue
-    ) -> Optional[Refinement]:
-        """
-        Annotate entity overlap for manual resolution.
-        
-        Args:
-            model: The domain model (modified in place)
-            issue: The entity overlap issue
-            
-        Returns:
-            Refinement record
-        """
-        # Add annotation to model metadata
+
+    # ─── Annotation methods ──────────────────────────────────────────
+
+    def _add_annotation(self, model: Dict[str, Any], annotation: Dict[str, Any]) -> None:
+        """Add a validation annotation to the model."""
         if "_validationAnnotations" not in model:
             model["_validationAnnotations"] = []
-        
+        model["_validationAnnotations"].append(annotation)
+
+    def annotate_entity_overlap(self, model: Dict[str, Any], issue: SemanticIssue) -> Optional[Refinement]:
         annotation = {
             "type": "ENTITY_OVERLAP",
             "affectedElements": issue.affected_elements,
@@ -235,38 +200,19 @@ class ModelRefiner:
             "recommendation": issue.recommendation,
             "requiresManualResolution": True
         }
-        
-        model["_validationAnnotations"].append(annotation)
-        
+        self._add_annotation(model, annotation)
         return Refinement(
             refinement_id=self._get_next_refinement_id(),
             refinement_type="suggested",
-            description=f"Annotated entity overlap: {', '.join(issue.affected_elements)}",
+            description=f"Annotato entity overlap: {', '.join(issue.affected_elements)}",
             applied=False,
             source_issue_type="ENTITY_OVERLAP",
             affected_path="_validationAnnotations",
             original_value=None,
             new_value=annotation
         )
-    
-    def annotate_semantic_ambiguity(
-        self,
-        model: Dict[str, Any],
-        issue: SemanticIssue
-    ) -> Optional[Refinement]:
-        """
-        Annotate semantic ambiguity for manual resolution.
-        
-        Args:
-            model: The domain model (modified in place)
-            issue: The semantic ambiguity issue
-            
-        Returns:
-            Refinement record
-        """
-        if "_validationAnnotations" not in model:
-            model["_validationAnnotations"] = []
-        
+
+    def annotate_semantic_ambiguity(self, model: Dict[str, Any], issue: SemanticIssue) -> Optional[Refinement]:
         annotation = {
             "type": "SEMANTIC_AMBIGUITY",
             "affectedElements": issue.affected_elements,
@@ -275,38 +221,19 @@ class ModelRefiner:
             "recommendation": issue.recommendation,
             "requiresManualResolution": True
         }
-        
-        model["_validationAnnotations"].append(annotation)
-        
+        self._add_annotation(model, annotation)
         return Refinement(
             refinement_id=self._get_next_refinement_id(),
             refinement_type="suggested",
-            description=f"Annotated semantic ambiguity in contexts: {', '.join(issue.contexts)}",
+            description=f"Annotata ambiguità semantica: {', '.join(issue.contexts)}",
             applied=False,
             source_issue_type="SEMANTIC_AMBIGUITY",
             affected_path="_validationAnnotations",
             original_value=None,
             new_value=annotation
         )
-    
-    def annotate_requirement_conflict(
-        self,
-        model: Dict[str, Any],
-        issue: ConflictIssue
-    ) -> Optional[Refinement]:
-        """
-        Annotate requirement conflict for manual resolution.
-        
-        Args:
-            model: The domain model (modified in place)
-            issue: The requirement conflict issue
-            
-        Returns:
-            Refinement record
-        """
-        if "_validationAnnotations" not in model:
-            model["_validationAnnotations"] = []
-        
+
+    def annotate_requirement_conflict(self, model: Dict[str, Any], issue: ConflictIssue) -> Optional[Refinement]:
         annotation = {
             "type": "REQUIREMENT_CONFLICT",
             "affectedElements": issue.affected_elements,
@@ -316,39 +243,19 @@ class ModelRefiner:
             "recommendation": issue.recommendation,
             "requiresManualResolution": True
         }
-        
-        model["_validationAnnotations"].append(annotation)
-        
+        self._add_annotation(model, annotation)
         return Refinement(
             refinement_id=self._get_next_refinement_id(),
             refinement_type="suggested",
-            description=f"Annotated requirement conflict in: {', '.join(issue.contexts)}",
+            description=f"Annotato conflitto requisiti: {', '.join(issue.contexts)}",
             applied=False,
             source_issue_type="REQUIREMENT_CONFLICT",
             affected_path="_validationAnnotations",
             original_value=None,
             new_value=annotation
         )
-    
-    def fix_duplicate_event(
-        self,
-        model: Dict[str, Any],
-        issue: ConflictIssue
-    ) -> Optional[Refinement]:
-        """
-        Annotate duplicate event for manual resolution.
-        Cannot auto-fix as ownership decision is needed.
-        
-        Args:
-            model: The domain model (modified in place)
-            issue: The duplicate event issue
-            
-        Returns:
-            Refinement record
-        """
-        if "_validationAnnotations" not in model:
-            model["_validationAnnotations"] = []
-        
+
+    def fix_duplicate_event(self, model: Dict[str, Any], issue: ConflictIssue) -> Optional[Refinement]:
         annotation = {
             "type": "DUPLICATE_EVENT",
             "affectedElements": issue.affected_elements,
@@ -357,81 +264,42 @@ class ModelRefiner:
             "recommendation": issue.recommendation,
             "requiresManualResolution": True
         }
-        
-        model["_validationAnnotations"].append(annotation)
-        
+        self._add_annotation(model, annotation)
         return Refinement(
             refinement_id=self._get_next_refinement_id(),
             refinement_type="suggested",
-            description=f"Annotated duplicate event from emitters: {', '.join(issue.contexts)}",
+            description=f"Annotato evento duplicato: {', '.join(issue.contexts)}",
             applied=False,
             source_issue_type="DUPLICATE_EVENT",
             affected_path="_validationAnnotations",
             original_value=None,
             new_value=annotation
         )
-    
-    def suggest_domain_reclassification(
-        self,
-        model: Dict[str, Any],
-        issue: ConflictIssue
-    ) -> Optional[Refinement]:
-        """
-        Suggest domain reclassification.
-        
-        Args:
-            model: The domain model (modified in place)
-            issue: The misclassified domain issue
-            
-        Returns:
-            Refinement record
-        """
-        if "_validationAnnotations" not in model:
-            model["_validationAnnotations"] = []
-        
+
+    def suggest_domain_reclassification(self, model: Dict[str, Any], issue: ConflictIssue) -> Optional[Refinement]:
         domain_name = issue.affected_elements[0] if issue.affected_elements else "Unknown"
-        
         annotation = {
             "type": "MISCLASSIFIED_DOMAIN",
             "domain": domain_name,
-            "currentClassification": "core",  # It was flagged from core
+            "currentClassification": "core",
             "suggestedClassification": "generic",
             "description": issue.description,
             "recommendation": issue.recommendation,
             "requiresManualResolution": True
         }
-        
-        model["_validationAnnotations"].append(annotation)
-        
+        self._add_annotation(model, annotation)
         return Refinement(
             refinement_id=self._get_next_refinement_id(),
             refinement_type="suggested",
-            description=f"Suggested reclassification for domain: {domain_name}",
+            description=f"Suggerita riclassificazione per: {domain_name}",
             applied=False,
             source_issue_type="MISCLASSIFIED_DOMAIN",
             affected_path="_validationAnnotations",
             original_value=None,
             new_value=annotation
         )
-    
-    def annotate_incompatible_pattern(
-        self,
-        model: Dict[str, Any],
-        issue: ConflictIssue
-    ) -> Optional[Refinement]:
-        """
-        Annotate incompatible pattern for manual resolution.
 
-        Args:
-            model: The domain model (modified in place)
-            issue: The incompatible pattern issue
-
-        Returns:
-            Refinement record
-        """
-        if "_validationAnnotations" not in model:
-            model["_validationAnnotations"] = []
-
+    def annotate_incompatible_pattern(self, model: Dict[str, Any], issue: ConflictIssue) -> Optional[Refinement]:
         annotation = {
             "type": "INCOMPATIBLE_PATTERN",
             "affectedElements": issue.affected_elements,
@@ -440,13 +308,11 @@ class ModelRefiner:
             "recommendation": issue.recommendation,
             "requiresManualResolution": True
         }
-
-        model["_validationAnnotations"].append(annotation)
-
+        self._add_annotation(model, annotation)
         return Refinement(
             refinement_id=self._get_next_refinement_id(),
             refinement_type="suggested",
-            description=f"Annotated incompatible pattern: {issue.description[:50]}...",
+            description=f"Annotato pattern incompatibile: {issue.description[:50]}...",
             applied=False,
             source_issue_type="INCOMPATIBLE_PATTERN",
             affected_path="_validationAnnotations",
@@ -454,31 +320,232 @@ class ModelRefiner:
             new_value=annotation
         )
 
-    def _apply_user_answers(
+    # ─── LLM-based answer interpretation ─────────────────────────────
+
+    async def _interpret_answer_with_llm(
+        self,
+        question: FollowUpQuestion,
+        answer: str,
+    ) -> Dict[str, Any]:
+        """
+        Use LLM to interpret a user answer and decide what model changes to apply.
+
+        Returns a dict with:
+        - action: what to do (rename_event, set_owner, reclassify_domain, etc.)
+        - description: human-readable description of the change
+        - changes: specific key-value changes to apply
+        """
+        system_prompt = (
+            "Sei un esperto DDD. Dato un problema di dominio, una domanda e la risposta dell'utente, "
+            "determina le modifiche concrete da applicare al modello di dominio.\n\n"
+            "Rispondi con un JSON con questi campi:\n"
+            '- "action": una tra "rename_event", "set_owner", "reclassify_domain", '
+            '"resolve_conflict", "add_mapping", "update_pattern", "no_change"\n'
+            '- "description": cosa fa questa modifica (in italiano, breve)\n'
+            '- "changes": oggetto con le modifiche specifiche. Esempi:\n'
+            '  Per rename_event: {"old_name": "...", "new_name": "..."}\n'
+            '  Per set_owner: {"entity": "...", "owner_context": "..."}\n'
+            '  Per reclassify_domain: {"domain": "...", "from": "core", "to": "generic"}\n'
+            '  Per resolve_conflict: {"resolution": "...", "priority": "req1|req2|both"}\n'
+            '  Per add_mapping: {"entity": "...", "source_context": "...", "target_context": "..."}\n'
+            '  Per update_pattern: {"upstream": "...", "downstream": "...", "new_pattern": "..."}\n\n'
+            "Rispondi SOLO con JSON valido (niente markdown)."
+        )
+
+        prompt = (
+            f"Tipo problema: {question.related_issue_type}\n"
+            f"Severità: {question.severity}\n"
+            f"Domanda: {question.question}\n"
+            f"Risposta utente: {answer}\n"
+            f"Elementi coinvolti: {json.dumps(question.affected_elements, ensure_ascii=False)}\n"
+            f"Contesto: {question.context}\n\n"
+            f"Quale modifica concreta applicare al modello?"
+        )
+
+        try:
+            response = await self._call_ollama(prompt, system_prompt)
+            raw = response.strip()
+            # Strip markdown fences
+            if raw.startswith("```"):
+                raw = re.sub(r"```(?:json)?\n?", "", raw).strip()
+                raw = raw.strip("`").strip()
+            # Extract JSON object
+            start = raw.find("{")
+            end = raw.rfind("}")
+            if start >= 0 and end > start:
+                raw = raw[start : end + 1]
+            return json.loads(raw)
+        except Exception as e:
+            logger.warning(f"LLM answer interpretation failed: {e}")
+            return {"action": "no_change", "description": "Interpretazione LLM fallita", "changes": {}}
+
+    def _apply_model_changes(
+        self,
+        model: Dict[str, Any],
+        question: FollowUpQuestion,
+        answer: str,
+        interpretation: Dict[str, Any],
+    ) -> bool:
+        """
+        Apply concrete model changes based on LLM interpretation.
+
+        Returns True if changes were actually applied to the model.
+        """
+        action = interpretation.get("action", "no_change")
+        changes = interpretation.get("changes", {})
+
+        if action == "rename_event":
+            old_name = changes.get("old_name", "")
+            new_name = changes.get("new_name", "")
+            if old_name and new_name:
+                event, path, idx = self._find_event_in_model(model, old_name)
+                if event:
+                    event["name"] = new_name
+                    logger.info(f"Renamed event '{old_name}' → '{new_name}'")
+                    return True
+
+        elif action == "set_owner":
+            entity_name = changes.get("entity", "")
+            owner = changes.get("owner_context", "")
+            if entity_name and owner:
+                # Mark ownership in model metadata
+                if "_ownershipDecisions" not in model:
+                    model["_ownershipDecisions"] = []
+                model["_ownershipDecisions"].append({
+                    "entity": entity_name,
+                    "owner": owner,
+                    "decidedAt": datetime.utcnow().isoformat() + "Z"
+                })
+                # Remove entity from non-owner contexts
+                self._enforce_entity_ownership(model, entity_name, owner)
+                logger.info(f"Set ownership: '{entity_name}' → '{owner}'")
+                return True
+
+        elif action == "reclassify_domain":
+            domain_name = changes.get("domain", "")
+            from_type = changes.get("from", "")
+            to_type = changes.get("to", "")
+            if domain_name and to_type:
+                applied = self._move_domain(model, domain_name, to_type)
+                if applied:
+                    logger.info(f"Reclassified '{domain_name}': {from_type} → {to_type}")
+                    return True
+
+        elif action == "resolve_conflict":
+            # Record the resolution decision
+            if "_conflictResolutions" not in model:
+                model["_conflictResolutions"] = []
+            model["_conflictResolutions"].append({
+                "issue_type": question.related_issue_type,
+                "resolution": changes.get("resolution", answer),
+                "priority": changes.get("priority", ""),
+                "affected_elements": question.affected_elements,
+                "decidedAt": datetime.utcnow().isoformat() + "Z"
+            })
+            logger.info(f"Conflict resolved: {changes.get('resolution', answer)[:80]}")
+            return True
+
+        elif action == "add_mapping":
+            entity = changes.get("entity", "")
+            source = changes.get("source_context", "")
+            target = changes.get("target_context", "")
+            if entity:
+                if "_contextMappings" not in model:
+                    model["_contextMappings"] = []
+                model["_contextMappings"].append({
+                    "entity": entity,
+                    "sourceContext": source,
+                    "targetContext": target,
+                    "mappingType": "anti-corruption-layer",
+                    "decidedAt": datetime.utcnow().isoformat() + "Z"
+                })
+                logger.info(f"Added mapping for '{entity}': {source} → {target}")
+                return True
+
+        elif action == "update_pattern":
+            upstream = changes.get("upstream", "")
+            downstream = changes.get("downstream", "")
+            new_pattern = changes.get("new_pattern", "")
+            if upstream and downstream and new_pattern:
+                # Update integration pattern
+                integrations = (
+                    model.get("contextIntegrations", [])
+                    or model.get("domainMap", {}).get("contextIntegrations", [])
+                )
+                for integration in integrations:
+                    if (integration.get("upstream", "") == upstream and
+                            integration.get("downstream", "") == downstream):
+                        old_pattern = integration.get("integrationPattern", "")
+                        integration["integrationPattern"] = new_pattern
+                        logger.info(f"Updated pattern {upstream}→{downstream}: {old_pattern} → {new_pattern}")
+                        return True
+
+        return False
+
+    def _enforce_entity_ownership(
+        self, model: Dict[str, Any], entity_name: str, owner_context: str
+    ) -> None:
+        """Remove entity from non-owner contexts, keeping only a reference by ID."""
+        domain_map = model.get("domainMap", {})
+        for domain_type in ["coreDomains", "supportingDomains", "genericDomains"]:
+            domains = domain_map.get(domain_type, [])
+            for domain in domains:
+                context = domain.get("boundedContext", {}).get("name", "")
+                if context.lower() == owner_context.lower():
+                    continue
+                entities = domain.get("entities", [])
+                for i, entity in enumerate(entities):
+                    if entity.get("name", "").lower() == entity_name.lower():
+                        # Replace with reference
+                        entities[i] = {
+                            "name": entity_name,
+                            "_referenceOnly": True,
+                            "_ownedBy": owner_context,
+                            "_note": f"Riferimento: entità gestita da {owner_context}"
+                        }
+                        break
+
+    def _move_domain(self, model: Dict[str, Any], domain_name: str, to_type: str) -> bool:
+        """Move a domain from one classification to another."""
+        type_map = {"core": "coreDomains", "supporting": "supportingDomains", "generic": "genericDomains"}
+        target_key = type_map.get(to_type.lower(), "")
+        if not target_key:
+            return False
+
+        domain_map = model.get("domainMap", {})
+        for from_key in ["coreDomains", "supportingDomains", "genericDomains"]:
+            if from_key == target_key:
+                continue
+            domains = domain_map.get(from_key, [])
+            for i, domain in enumerate(domains):
+                if domain.get("name", "").lower() == domain_name.lower():
+                    # Move to target
+                    moved = domains.pop(i)
+                    if target_key not in domain_map:
+                        domain_map[target_key] = []
+                    domain_map[target_key].append(moved)
+                    return True
+        return False
+
+    # ─── User answer processing ──────────────────────────────────────
+
+    async def _apply_user_answers(
         self,
         model: Dict[str, Any],
         questions: List[FollowUpQuestion],
-        answers: Dict[str, str]
+        answers: Dict[str, str],
+        use_llm: bool = True,
     ) -> List[Refinement]:
         """
         Apply user answers to refine the model iteratively.
 
-        This method interprets user answers and applies targeted fixes to the model.
-
-        Args:
-            model: The domain model (modified in place)
-            questions: The questions that were asked
-            answers: User answers mapped by question ID (q0, q1, etc.)
-
-        Returns:
-            List of refinements applied based on user answers
+        Uses LLM to interpret each answer and apply concrete changes.
         """
         refinements = []
 
         for question_id, answer in answers.items():
-            # Extract question index (q0 -> 0, q1 -> 1)
             try:
-                question_index = int(question_id[1:])
+                question_index = int(question_id.replace("q", ""))
             except (ValueError, IndexError):
                 logger.warning(f"Invalid question ID format: {question_id}")
                 continue
@@ -489,268 +556,71 @@ class ModelRefiner:
 
             question = questions[question_index]
 
-            # Apply refinement based on question category and answer
-            ref = self._apply_single_answer(model, question, answer)
-            if ref:
-                refinements.append(ref)
-                logger.info(f"Applied user answer for {question.category}: {ref.description}")
+            # Always record the user's decision
+            if "_userGuidedFixes" not in model:
+                model["_userGuidedFixes"] = []
+            model["_userGuidedFixes"].append({
+                "type": f"{question.related_issue_type}_RESOLVED",
+                "question": question.question[:200],
+                "answer": answer,
+                "affected_elements": question.affected_elements,
+                "context": question.context,
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            })
+
+            # Use LLM to interpret the answer and apply model changes
+            applied = False
+            description = f"{question.related_issue_type} risolto: {answer[:80]}"
+
+            if use_llm:
+                interpretation = await self._interpret_answer_with_llm(question, answer)
+                applied = self._apply_model_changes(model, question, answer, interpretation)
+                if interpretation.get("description"):
+                    description = interpretation["description"]
+                logger.info(
+                    f"Answer for {question.related_issue_type}: "
+                    f"action={interpretation.get('action', '?')}, applied={applied}"
+                )
+            else:
+                logger.info(f"Recorded answer for {question.related_issue_type} (no LLM)")
+
+            refinements.append(Refinement(
+                refinement_id=self._get_next_refinement_id(),
+                refinement_type="manual",
+                description=description,
+                applied=applied,
+                source_issue_type=question.related_issue_type,
+                affected_path="_userGuidedFixes",
+                original_value="unresolved",
+                new_value=answer[:100]
+            ))
 
         return refinements
 
-    def _apply_single_answer(
-        self,
-        model: Dict[str, Any],
-        question: FollowUpQuestion,
-        answer: str
-    ) -> Optional[Refinement]:
-        """
-        Apply a single user answer to refine the model.
+    # ─── Main entry point ────────────────────────────────────────────
 
-        Args:
-            model: The domain model (modified in place)
-            question: The question that was asked
-            answer: The user's answer
-
-        Returns:
-            Refinement record if a change was applied
-        """
-        category = question.category.lower()
-        answer_lower = answer.lower()
-
-        # Handle Entity Overlap
-        if "entity" in category and "overlap" in category:
-            return self._handle_entity_overlap_answer(model, question, answer)
-
-        # Handle Requirement Conflict
-        elif "requirement" in category and "conflict" in category:
-            return self._handle_requirement_conflict_answer(model, question, answer)
-
-        # Handle Duplicate Event
-        elif "event" in category or "duplicate" in category:
-            return self._handle_duplicate_event_answer(model, question, answer)
-
-        # Handle Naming Violation
-        elif "naming" in category:
-            return self._handle_naming_answer(model, question, answer)
-
-        # Handle Domain Classification
-        elif "domain" in category or "classification" in category:
-            return self._handle_domain_classification_answer(model, question, answer)
-
-        # Generic handler for other categories
-        else:
-            logger.info(f"No specific handler for category '{question.category}', recording answer")
-            # Record answer in metadata for manual review
-            if "_userAnswers" not in model:
-                model["_userAnswers"] = []
-            model["_userAnswers"].append({
-                "question": question.question,
-                "answer": answer,
-                "category": question.category
-            })
-            return None
-
-    def _handle_entity_overlap_answer(
-        self,
-        model: Dict[str, Any],
-        question: FollowUpQuestion,
-        answer: str
-    ) -> Optional[Refinement]:
-        """Handle user answer for entity overlap issues."""
-        # Example: "Order belongs only to OrderManagement"
-        # Extract entity name and context from question
-        logger.info(f"Handling entity overlap: {answer[:100]}")
-
-        # Simple heuristic: if answer mentions "only" or "belongs to",
-        # user is choosing single ownership
-        if "only" in answer.lower() or "belongs to" in answer.lower():
-            # Record decision
-            if "_userGuidedFixes" not in model:
-                model["_userGuidedFixes"] = []
-
-            model["_userGuidedFixes"].append({
-                "type": "ENTITY_OVERLAP_RESOLVED",
-                "question": question.question[:100],
-                "resolution": answer,
-                "timestamp": datetime.utcnow().isoformat() + "Z"
-            })
-
-            return Refinement(
-                refinement_id=self._get_next_refinement_id(),
-                refinement_type="manual",
-                description=f"Entity overlap resolved based on user input: {answer[:80]}",
-                applied=True,
-                source_issue_type="ENTITY_OVERLAP",
-                affected_path="_userGuidedFixes",
-                original_value="ambiguous ownership",
-                new_value=answer[:100]
-            )
-
-        return None
-
-    def _handle_requirement_conflict_answer(
-        self,
-        model: Dict[str, Any],
-        question: FollowUpQuestion,
-        answer: str
-    ) -> Optional[Refinement]:
-        """Handle user answer for requirement conflict issues."""
-        logger.info(f"Handling requirement conflict: {answer[:100]}")
-
-        # User has specified which requirement takes priority
-        if "_userGuidedFixes" not in model:
-            model["_userGuidedFixes"] = []
-
-        model["_userGuidedFixes"].append({
-            "type": "REQUIREMENT_CONFLICT_RESOLVED",
-            "question": question.question[:100],
-            "resolution": answer,
-            "priority_decision": answer,
-            "timestamp": datetime.utcnow().isoformat() + "Z"
-        })
-
-        return Refinement(
-            refinement_id=self._get_next_refinement_id(),
-            refinement_type="manual",
-            description=f"Requirement conflict resolved: {answer[:80]}",
-            applied=True,
-            source_issue_type="REQUIREMENT_CONFLICT",
-            affected_path="_userGuidedFixes",
-            original_value="conflicting requirements",
-            new_value=answer[:100]
-        )
-
-    def _handle_duplicate_event_answer(
-        self,
-        model: Dict[str, Any],
-        question: FollowUpQuestion,
-        answer: str
-    ) -> Optional[Refinement]:
-        """Handle user answer for duplicate event issues."""
-        logger.info(f"Handling duplicate event: {answer[:100]}")
-
-        # User has specified which domain should emit the event
-        if "_userGuidedFixes" not in model:
-            model["_userGuidedFixes"] = []
-
-        model["_userGuidedFixes"].append({
-            "type": "DUPLICATE_EVENT_RESOLVED",
-            "question": question.question[:100],
-            "resolution": answer,
-            "chosen_emitter": answer,
-            "timestamp": datetime.utcnow().isoformat() + "Z"
-        })
-
-        return Refinement(
-            refinement_id=self._get_next_refinement_id(),
-            refinement_type="manual",
-            description=f"Duplicate event resolved: {answer[:80]}",
-            applied=True,
-            source_issue_type="DUPLICATE_EVENT",
-            affected_path="_userGuidedFixes",
-            original_value="multiple emitters",
-            new_value=answer[:100]
-        )
-
-    def _handle_naming_answer(
-        self,
-        model: Dict[str, Any],
-        question: FollowUpQuestion,
-        answer: str
-    ) -> Optional[Refinement]:
-        """Handle user answer for naming violation issues."""
-        logger.info(f"Handling naming violation: {answer[:100]}")
-
-        # If user provides a new name, apply it
-        # Simple heuristic: check if answer contains "should be" or "rename to"
-        if "should be" in answer.lower() or "rename" in answer.lower():
-            if "_userGuidedFixes" not in model:
-                model["_userGuidedFixes"] = []
-
-            model["_userGuidedFixes"].append({
-                "type": "NAMING_VIOLATION_RESOLVED",
-                "question": question.question[:100],
-                "resolution": answer,
-                "suggested_name": answer,
-                "timestamp": datetime.utcnow().isoformat() + "Z"
-            })
-
-            return Refinement(
-                refinement_id=self._get_next_refinement_id(),
-                refinement_type="manual",
-                description=f"Naming updated based on user input: {answer[:80]}",
-                applied=True,
-                source_issue_type="NAMING_VIOLATION",
-                affected_path="_userGuidedFixes",
-                original_value="incorrect naming",
-                new_value=answer[:100]
-            )
-
-        return None
-
-    def _handle_domain_classification_answer(
-        self,
-        model: Dict[str, Any],
-        question: FollowUpQuestion,
-        answer: str
-    ) -> Optional[Refinement]:
-        """Handle user answer for domain classification issues."""
-        logger.info(f"Handling domain classification: {answer[:100]}")
-
-        # User confirms or changes domain classification
-        if "_userGuidedFixes" not in model:
-            model["_userGuidedFixes"] = []
-
-        model["_userGuidedFixes"].append({
-            "type": "DOMAIN_CLASSIFICATION_RESOLVED",
-            "question": question.question[:100],
-            "resolution": answer,
-            "classification_decision": answer,
-            "timestamp": datetime.utcnow().isoformat() + "Z"
-        })
-
-        return Refinement(
-            refinement_id=self._get_next_refinement_id(),
-            refinement_type="manual",
-            description=f"Domain classification confirmed: {answer[:80]}",
-            applied=True,
-            source_issue_type="MISCLASSIFIED_DOMAIN",
-            affected_path="_userGuidedFixes",
-            original_value="uncertain classification",
-            new_value=answer[:100]
-        )
-
-    def refine_model(
+    async def refine_model(
         self,
         domain_model: Dict[str, Any],
         semantic_issues: List[SemanticIssue],
         conflict_issues: List[ConflictIssue],
         follow_up_questions: List[FollowUpQuestion],
         previous_answers: Dict[str, str] = None,
-        apply_auto_fixes: bool = True
+        apply_auto_fixes: bool = True,
+        use_llm: bool = True,
     ) -> Tuple[Dict[str, Any], RefinementReport]:
         """
         Apply refinements to the domain model.
 
-        Args:
-            domain_model: Original domain model
-            semantic_issues: Detected semantic issues
-            conflict_issues: Detected conflict issues
-            follow_up_questions: Generated follow-up questions
-            previous_answers: User answers from previous iteration (q0, q1, etc.)
-            apply_auto_fixes: Whether to apply automatic fixes
-
-        Returns:
-            Tuple of (refined model, refinement report)
+        Now async to support LLM-based answer interpretation.
         """
         if previous_answers is None:
             previous_answers = {}
 
         logger.info("Starting model refinement...")
         if previous_answers:
-            logger.info(f"Applying {len(previous_answers)} user answers for iterative refinement")
-        
-        # Create deep copy to avoid modifying original
+            logger.info(f"Applying {len(previous_answers)} user answers with LLM interpretation")
+
         refined = self._deep_copy_model(domain_model)
         refinements = []
         unresolved = []
@@ -759,21 +629,18 @@ class ModelRefiner:
         # Update metadata
         if "metadata" not in refined:
             refined["metadata"] = {}
-
         refined["metadata"]["refinedAt"] = datetime.utcnow().isoformat() + "Z"
         refined["metadata"]["refinedBy"] = "agent-2-consistency-analyzer"
         refined["metadata"]["validationVersion"] = "1.0.0"
 
-        # Apply user answers from previous iteration (ITERATIVE REFINEMENT)
+        # Apply user answers from previous iteration (LLM-interpreted)
         if previous_answers:
-            user_refinements = self._apply_user_answers(
-                refined,
-                follow_up_questions,
-                previous_answers
+            user_refinements = await self._apply_user_answers(
+                refined, follow_up_questions, previous_answers, use_llm=use_llm
             )
             refinements.extend(user_refinements)
             auto_fixed += len([r for r in user_refinements if r.applied])
-        
+
         # Process semantic issues
         for issue in semantic_issues:
             if issue.issue_type == IssueType.ENTITY_OVERLAP:
@@ -781,18 +648,16 @@ class ModelRefiner:
                 if ref:
                     refinements.append(ref)
                     unresolved.append(f"ENTITY_OVERLAP: {issue.description}")
-            
             elif issue.issue_type == IssueType.SEMANTIC_AMBIGUITY:
                 ref = self.annotate_semantic_ambiguity(refined, issue)
                 if ref:
                     refinements.append(ref)
                     unresolved.append(f"SEMANTIC_AMBIGUITY: {issue.description}")
-        
+
         # Process conflict issues
         for issue in conflict_issues:
             if issue.conflict_type == ConflictType.NAMING_VIOLATION:
                 if apply_auto_fixes:
-                    # Extract event name from affected elements
                     event_name = issue.affected_elements[0] if issue.affected_elements else ""
                     ref = self.fix_naming_violation(refined, event_name)
                     if ref and ref.applied:
@@ -802,34 +667,30 @@ class ModelRefiner:
                         unresolved.append(f"NAMING_VIOLATION: {issue.description}")
                 else:
                     unresolved.append(f"NAMING_VIOLATION: {issue.description}")
-            
             elif issue.conflict_type == ConflictType.REQUIREMENT_CONFLICT:
                 ref = self.annotate_requirement_conflict(refined, issue)
                 if ref:
                     refinements.append(ref)
                     unresolved.append(f"REQUIREMENT_CONFLICT: {issue.description}")
-            
             elif issue.conflict_type == ConflictType.DUPLICATE_EVENT:
                 ref = self.fix_duplicate_event(refined, issue)
                 if ref:
                     refinements.append(ref)
                     unresolved.append(f"DUPLICATE_EVENT: {issue.description}")
-            
             elif issue.conflict_type == ConflictType.MISCLASSIFIED_DOMAIN:
                 ref = self.suggest_domain_reclassification(refined, issue)
                 if ref:
                     refinements.append(ref)
                     unresolved.append(f"MISCLASSIFIED_DOMAIN: {issue.description}")
-            
             elif issue.conflict_type == ConflictType.INCOMPATIBLE_PATTERN:
                 ref = self.annotate_incompatible_pattern(refined, issue)
                 if ref:
                     refinements.append(ref)
                     unresolved.append(f"INCOMPATIBLE_PATTERN: {issue.description}")
-        
+
         # Add follow-up questions to model
         refined["_followUpQuestions"] = [q.to_dict() for q in follow_up_questions]
-        
+
         # Create report
         total_issues = len(semantic_issues) + len(conflict_issues)
         report = RefinementReport(
@@ -839,12 +700,12 @@ class ModelRefiner:
             refinements=refinements,
             unresolved_issues=unresolved
         )
-        
+
         logger.info(
             f"Model refinement complete. "
             f"Total issues: {total_issues}, "
             f"Auto-fixed: {auto_fixed}, "
             f"Requires manual: {report.requires_manual}"
         )
-        
+
         return refined, report

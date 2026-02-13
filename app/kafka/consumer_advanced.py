@@ -110,12 +110,13 @@ class Agent2KafkaConsumer:
 
             # Step 4: Refine Model
             logger.info(f"[{message_id}] Refining model...")
-            refined_model, refinement_report = model_refiner.refine_model(
+            refined_model, refinement_report = await model_refiner.refine_model(
                 domain_model,
                 semantic_issues,
                 conflict_issues,
                 questions,
-                apply_auto_fixes=True
+                apply_auto_fixes=True,
+                use_llm=False
             )
 
             # Costruisci risultato

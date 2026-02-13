@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     # Ollama Configuration
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "llama3"
+    OLLAMA_MODEL: str = "mistral:7b"
     OLLAMA_TIMEOUT: int = 120
 
     # Kafka Configuration (A2A Communication)
@@ -25,7 +25,7 @@ class Settings(BaseSettings):
 
     # API Configuration
     API_HOST: str = "0.0.0.0"
-    API_PORT: int = 8000
+    API_PORT: int = 8002
     API_RELOAD: bool = True
 
     # Logging

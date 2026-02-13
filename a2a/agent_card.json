@@ -2,7 +2,7 @@
   "protocolVersion": "0.3",
   "name": "Consistency & Conflict Analyzer",
   "description": "Agent 2 of the Intelligent Domain Architect pipeline. Validates Domain-Driven Design models for semantic consistency, detects conflicts between bounded contexts, identifies ambiguities, and generates clarification questions for business stakeholders. Produces a validated and refined domain model ready for microservice specification generation.",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "provider": {
     "organization": "Intelligent Domain Architect Agents",
     "url": "https://github.com/yourusername/intelligent-domain-architect"
@@ -33,7 +33,7 @@
       },
       {
         "uri": "https://intelligent-domain-architect.io/extensions/llm-reasoning/v1",
-        "description": "LLM-based semantic reasoning using Ollama/Llama3",
+        "description": "LLM-based semantic reasoning using Ollama/Mistral 7B",
         "required": false
       }
     ]
@@ -272,7 +272,7 @@
     },
     "llm": {
       "provider": "ollama",
-      "model": "llama3",
+      "model": "mistral:7b",
       "endpoint": "http://localhost:11434"
     },
     "analysis": {

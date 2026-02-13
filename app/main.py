@@ -128,6 +128,7 @@ class ValidationResponse(BaseModel):
     follow_up_questions: List[Dict[str, Any]]
     refinement_report: Dict[str, Any]
     refined_model: Dict[str, Any]
+    suggested_max_iterations: int = 5
 
 
 class A2AMessageResponse(BaseModel):
@@ -475,6 +476,90 @@ async def get_configuration():
 # Internal Processing Functions
 # ============================================================================
 
+async def _estimate_iterations(
+    summary: ValidationSummary,
+    semantic_issues: list,
+    conflict_issues: list,
+    use_llm: bool = True,
+) -> int:
+    """
+    Estimate how many iterations are needed to resolve all issues.
+
+    Uses LLM when available; falls back to a severity-based heuristic.
+    Always returns a value between 1 and 10, default 5 on failure.
+    """
+    DEFAULT = 5
+
+    if summary.total_issues == 0:
+        return 1
+
+    # ── Try LLM estimation ──
+    if use_llm:
+        try:
+            import httpx, json as _json
+            issues_summary = (
+                f"Problemi trovati: {summary.total_issues} totali\n"
+                f"- Entity overlaps: {summary.entity_overlaps}\n"
+                f"- Ambiguità semantiche: {summary.semantic_ambiguities}\n"
+                f"- Conflitti requisiti: {summary.requirement_conflicts}\n"
+                f"- Eventi duplicati: {summary.duplicate_events}\n"
+                f"- Violazioni naming: {summary.naming_violations}\n"
+                f"- Pattern incompatibili: {summary.incompatible_patterns}\n"
+                f"- Domini misclassificati: {summary.misclassified_domains}\n"
+                f"- Auto-corretti: {summary.auto_fixed}\n"
+                f"- Da risolvere manualmente: {summary.requires_manual}\n"
+            )
+            system_prompt = (
+                "Sei un esperto DDD. Dato un riepilogo dei problemi trovati in un domain model, "
+                "stima quante iterazioni di domande-risposte servono per risolvere TUTTI i problemi.\n\n"
+                "REGOLE:\n"
+                "- Ogni iterazione risolve 1-3 problemi tramite domande all'utente\n"
+                "- I problemi HIGH richiedono piu attenzione (1 per iterazione)\n"
+                "- I problemi MEDIUM/LOW possono essere raggruppati (2-3 per iterazione)\n"
+                "- I problemi auto-corretti NON contano\n"
+                "- Rispondi SOLO con un numero intero tra 1 e 10, NIENTE altro testo\n"
+            )
+            payload = {
+                "model": settings.OLLAMA_MODEL,
+                "prompt": issues_summary + "\nQuante iterazioni servono? Rispondi solo con il numero.",
+                "system": system_prompt,
+                "stream": False,
+                "options": {"temperature": 0.1, "num_predict": 16},
+            }
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(settings.get_ollama_generate_url(), json=payload)
+                resp.raise_for_status()
+                raw = resp.json().get("response", "").strip()
+                # Extract first integer from response
+                import re
+                match = re.search(r"\d+", raw)
+                if match:
+                    n = int(match.group())
+                    n = max(1, min(n, 10))
+                    logger.info(f"LLM estimated {n} iterations needed")
+                    return n
+        except Exception as e:
+            logger.warning(f"LLM iteration estimation failed: {e}, using heuristic")
+
+    # ── Heuristic fallback ──
+    high_issues = sum(
+        1 for i in semantic_issues if getattr(i, "severity", "MEDIUM") == "HIGH"
+    ) + sum(
+        1 for i in conflict_issues if getattr(i, "severity", "MEDIUM") == "HIGH"
+    )
+    manual = summary.requires_manual
+    if manual <= 1:
+        return 1
+    elif manual <= 3:
+        return 2
+    elif manual <= 5:
+        return 3
+    elif high_issues >= 3:
+        return min(manual, 7)
+    else:
+        return DEFAULT
+
+
 async def _process_domain_model(
     task_id: str,
     domain_model: Dict[str, Any],
@@ -508,22 +593,53 @@ async def _process_domain_model(
             task.status = TaskStatus(state=TaskState.WORKING)
             tasks_store[task_id] = task
         
-        logger.info(f"[{task_id}] Starting semantic analysis...")
+        logger.info(f"[{task_id}] Starting analysis pipeline...")
 
-        # Log if this is an iterative refinement
+        # ── Step 0: Pre-apply previous answers BEFORE analysis ──
+        # This ensures structural changes (ownership, reclassification, renames)
+        # take effect before the analyzers run, so issues get resolved.
         if previous_answers:
-            logger.info(f"[{task_id}] Iterative refinement with {len(previous_answers)} user answers")
+            logger.info(f"[{task_id}] Pre-applying {len(previous_answers)} user answers to model")
 
-        # Step 1: Semantic Analysis (embeddings-based)
+            # Extract questions from previous iteration (stored in model by refiner)
+            prev_questions_data = domain_model.get("_followUpQuestions", [])
+            if prev_questions_data:
+                from app.services.question_generator import FollowUpQuestion
+                prev_questions = [
+                    FollowUpQuestion(
+                        question_id=q.get("question_id", f"FUQ-{i}"),
+                        question=q.get("question", ""),
+                        context=q.get("context", ""),
+                        related_issue_type=q.get("related_issue_type", "UNKNOWN"),
+                        severity=q.get("severity", "MEDIUM"),
+                        affected_elements=q.get("affected_elements", []),
+                        suggested_answers=q.get("suggested_answers"),
+                    )
+                    for i, q in enumerate(prev_questions_data)
+                ]
+                # Apply user answers → modifies domain_model in place
+                await model_refiner._apply_user_answers(
+                    domain_model, prev_questions, previous_answers, use_llm=use_llm
+                )
+                logger.info(f"[{task_id}] Applied answers using {len(prev_questions)} previous questions")
+            else:
+                logger.warning(f"[{task_id}] No _followUpQuestions in model, cannot match answers")
+
+            # Clean up old metadata to prevent accumulation
+            domain_model.pop("_validationAnnotations", None)
+            domain_model.pop("_followUpQuestions", None)
+            # Keep _userGuidedFixes and _ownershipDecisions for history
+
+        # ── Step 1: Semantic Analysis (embeddings-based) ──
         semantic_issues = semantic_analyzer.analyze(domain_model)
         logger.info(f"[{task_id}] Found {len(semantic_issues)} semantic issues")
-        
-        # Step 2: Conflict Detection (rule-based + LLM)
+
+        # ── Step 2: Conflict Detection (rule-based + LLM) ──
         logger.info(f"[{task_id}] Starting conflict detection...")
         conflict_issues = await conflict_detector.analyze(domain_model, use_llm=use_llm)
         logger.info(f"[{task_id}] Found {len(conflict_issues)} conflict issues")
-        
-        # Step 3: Generate Follow-up Questions
+
+        # ── Step 3: Generate Follow-up Questions ──
         logger.info(f"[{task_id}] Generating follow-up questions...")
         follow_up_questions = await question_generator.generate_questions(
             semantic_issues,
@@ -532,16 +648,17 @@ async def _process_domain_model(
             use_llm=use_llm
         )
         logger.info(f"[{task_id}] Generated {len(follow_up_questions)} questions")
-        
-        # Step 4: Refine Model
+
+        # ── Step 4: Refine Model (auto-fixes + annotations, NO re-apply answers) ──
         logger.info(f"[{task_id}] Refining model...")
-        refined_model, refinement_report = model_refiner.refine_model(
+        refined_model, refinement_report = await model_refiner.refine_model(
             domain_model,
             semantic_issues,
             conflict_issues,
             follow_up_questions,
-            previous_answers=previous_answers,
-            apply_auto_fixes=apply_auto_fixes
+            previous_answers={},
+            apply_auto_fixes=apply_auto_fixes,
+            use_llm=use_llm
         )
         logger.info(f"[{task_id}] Model refinement complete")
         
@@ -561,7 +678,13 @@ async def _process_domain_model(
         
         # Determine status
         status = "VALID" if summary.total_issues == 0 else "ISSUES_FOUND"
-        
+
+        # ── Step 5: Estimate iterations needed (LLM, fallback to heuristic) ──
+        suggested_max_iterations = await _estimate_iterations(
+            summary, semantic_issues, conflict_issues, use_llm=use_llm
+        )
+        logger.info(f"[{task_id}] Suggested max iterations: {suggested_max_iterations}")
+
         result = ValidationResponse(
             status=status,
             task_id=task_id,
@@ -570,7 +693,8 @@ async def _process_domain_model(
             conflict_issues=[i.to_dict() for i in conflict_issues],
             follow_up_questions=[q.to_dict() for q in follow_up_questions],
             refinement_report=refinement_report.to_dict(),
-            refined_model=refined_model
+            refined_model=refined_model,
+            suggested_max_iterations=suggested_max_iterations
         )
         
         # Update task if stored

@@ -1,0 +1,349 @@
+{
+  "metadata": {
+    "modelId": "dm-banking-001",
+    "version": "1.0",
+    "createdAt": "2026-02-13T10:00:00Z",
+    "createdBy": "agent-1-interviewer",
+    "projectName": "Digital Banking Platform",
+    "description": "Modello DDD per piattaforma bancaria digitale con 4 problemi intenzionali: eventi non al passato (NAMING_VIOLATION), pattern sincrono su infrastruttura asincrona (INCOMPATIBLE_PATTERN), requisiti contraddittori su consistenza saldi (REQUIREMENT_CONFLICT), Transaction duplicata in 2 contesti (ENTITY_OVERLAP)"
+  },
+
+  "businessContext": {
+    "objectives": [
+      "Offrire servizi bancari completamente digitali",
+      "Processare bonifici in tempo reale",
+      "Garantire conformita normativa PSD2 e antiriciclaggio"
+    ],
+    "boundaries": [
+      "Solo conti correnti e carte di debito — no investimenti",
+      "Mercato italiano per MVP",
+      "Licenza bancaria gia ottenuta"
+    ]
+  },
+
+  "domainMap": {
+    "coreDomains": [
+      {
+        "id": "account-management",
+        "name": "Account Management",
+        "type": "core",
+        "description": "Gestione conti correnti, saldi e movimenti",
+        "boundedContext": {
+          "name": "AccountContext",
+          "ubiquitousLanguage": {
+            "Account": "Conto corrente del cliente",
+            "Transaction": "Movimento contabile che modifica il saldo",
+            "Balance": "Saldo disponibile del conto"
+          }
+        },
+        "entities": [
+          {
+            "name": "Account",
+            "type": "aggregate-root",
+            "identity": "accountId (IBAN)",
+            "lifecycle": ["Pending", "Active", "Frozen", "Closed"],
+            "attributes": [
+              {"name": "accountId", "type": "IBAN", "required": true},
+              {"name": "customerId", "type": "UUID", "required": true},
+              {"name": "balance", "type": "Money", "required": true},
+              {"name": "currency", "type": "Currency", "required": true},
+              {"name": "status", "type": "AccountStatus", "required": true},
+              {"name": "openedAt", "type": "DateTime", "required": true}
+            ],
+            "invariants": [
+              "Balance cannot go below overdraft limit",
+              "Frozen accounts cannot process outgoing transactions"
+            ]
+          },
+          {
+            "name": "Transaction",
+            "type": "entity",
+            "identity": "transactionId (UUID)",
+            "attributes": [
+              {"name": "transactionId", "type": "UUID", "required": true},
+              {"name": "accountId", "type": "IBAN", "required": true},
+              {"name": "amount", "type": "Money", "required": true},
+              {"name": "type", "type": "TransactionType", "required": true},
+              {"name": "description", "type": "String", "required": false},
+              {"name": "executedAt", "type": "DateTime", "required": true}
+            ]
+          }
+        ],
+        "valueObjects": [
+          {
+            "name": "Money",
+            "attributes": [
+              {"name": "amount", "type": "Decimal"},
+              {"name": "currency", "type": "Currency"}
+            ]
+          }
+        ],
+        "functionalRequirements": [
+          {
+            "id": "FR-ACC-001",
+            "description": "Il saldo del conto deve essere aggiornato in modo fortemente consistente — ogni transazione deve riflettere immediatamente il nuovo saldo senza ritardi",
+            "priority": "must-have"
+          },
+          {
+            "id": "FR-ACC-002",
+            "description": "Le notifiche di movimento e l'aggiornamento del saldo possono avvenire in modo eventualmente consistente per migliorare le performance",
+            "priority": "must-have"
+          }
+        ]
+      },
+      {
+        "id": "payment-processing",
+        "name": "Payment Processing",
+        "type": "core",
+        "description": "Elaborazione bonifici, addebiti diretti e pagamenti",
+        "boundedContext": {
+          "name": "PaymentContext",
+          "ubiquitousLanguage": {
+            "Payment": "Ordine di pagamento da eseguire",
+            "Transaction": "Operazione di pagamento processata",
+            "Beneficiary": "Destinatario del pagamento"
+          }
+        },
+        "entities": [
+          {
+            "name": "Payment",
+            "type": "aggregate-root",
+            "identity": "paymentId (UUID)",
+            "lifecycle": ["Created", "Validated", "Authorized", "Executed", "Failed"],
+            "attributes": [
+              {"name": "paymentId", "type": "UUID", "required": true},
+              {"name": "sourceAccount", "type": "IBAN", "required": true},
+              {"name": "destinationAccount", "type": "IBAN", "required": true},
+              {"name": "amount", "type": "Money", "required": true},
+              {"name": "status", "type": "PaymentStatus", "required": true},
+              {"name": "scheduledAt", "type": "DateTime", "required": false}
+            ],
+            "invariants": [
+              "Amount must be positive",
+              "Source and destination cannot be the same account"
+            ]
+          },
+          {
+            "name": "Transaction",
+            "type": "entity",
+            "identity": "transactionId (UUID)",
+            "attributes": [
+              {"name": "transactionId", "type": "UUID", "required": true},
+              {"name": "paymentId", "type": "UUID", "required": true},
+              {"name": "amount", "type": "Money", "required": true},
+              {"name": "fee", "type": "Money", "required": false},
+              {"name": "processedAt", "type": "DateTime", "required": true},
+              {"name": "status", "type": "TransactionStatus", "required": true}
+            ]
+          }
+        ],
+        "functionalRequirements": [
+          {
+            "id": "FR-PAY-001",
+            "description": "I bonifici istantanei devono essere verificati in tempo reale con chiamata sincrona al servizio saldi prima dell'esecuzione",
+            "priority": "must-have"
+          },
+          {
+            "id": "FR-PAY-002",
+            "description": "I bonifici ordinari possono essere elaborati in batch durante la notte",
+            "priority": "should-have"
+          }
+        ]
+      }
+    ],
+    "supportingDomains": [
+      {
+        "id": "card-services",
+        "name": "Card Services",
+        "type": "supporting",
+        "description": "Gestione carte di debito e operazioni POS/ATM",
+        "supportsCoreDomains": ["account-management"],
+        "boundedContext": {
+          "name": "CardContext",
+          "ubiquitousLanguage": {
+            "Card": "Carta di debito associata a un conto",
+            "Authorization": "Autorizzazione di una transazione con carta"
+          }
+        },
+        "entities": [
+          {
+            "name": "Card",
+            "type": "aggregate-root",
+            "identity": "cardId (UUID)",
+            "attributes": [
+              {"name": "cardId", "type": "UUID", "required": true},
+              {"name": "accountId", "type": "IBAN", "required": true},
+              {"name": "cardNumber", "type": "String", "required": true},
+              {"name": "expiresAt", "type": "Date", "required": true},
+              {"name": "status", "type": "CardStatus", "required": true},
+              {"name": "dailyLimit", "type": "Money", "required": true}
+            ],
+            "invariants": [
+              "Daily spending cannot exceed daily limit",
+              "Expired cards must be blocked"
+            ]
+          },
+          {
+            "name": "Authorization",
+            "type": "entity",
+            "identity": "authorizationId (UUID)",
+            "attributes": [
+              {"name": "authorizationId", "type": "UUID", "required": true},
+              {"name": "cardId", "type": "UUID", "required": true},
+              {"name": "amount", "type": "Money", "required": true},
+              {"name": "merchant", "type": "String", "required": true},
+              {"name": "status", "type": "AuthStatus", "required": true}
+            ]
+          }
+        ],
+        "functionalRequirements": [
+          {
+            "id": "FR-CARD-001",
+            "description": "L'autorizzazione della carta deve avvenire in massimo 2 secondi con risposta sincrona al POS",
+            "priority": "must-have"
+          }
+        ]
+      },
+      {
+        "id": "compliance",
+        "name": "Compliance & AML",
+        "type": "supporting",
+        "description": "Antiriciclaggio, KYC e conformita normativa",
+        "supportsCoreDomains": ["payment-processing", "account-management"],
+        "boundedContext": {
+          "name": "ComplianceContext",
+          "ubiquitousLanguage": {
+            "Alert": "Segnalazione di operazione sospetta",
+            "KYCProfile": "Profilo di adeguata verifica del cliente"
+          }
+        },
+        "entities": [
+          {
+            "name": "Alert",
+            "type": "aggregate-root",
+            "identity": "alertId (UUID)",
+            "attributes": [
+              {"name": "alertId", "type": "UUID", "required": true},
+              {"name": "customerId", "type": "UUID", "required": true},
+              {"name": "reason", "type": "String", "required": true},
+              {"name": "riskScore", "type": "Integer", "required": true},
+              {"name": "status", "type": "AlertStatus", "required": true}
+            ]
+          }
+        ],
+        "functionalRequirements": [
+          {
+            "id": "FR-COMP-001",
+            "description": "Ogni transazione sopra 10.000 EUR deve generare un alert automatico",
+            "priority": "must-have"
+          }
+        ]
+      }
+    ],
+    "genericDomains": []
+  },
+
+  "eventDrivenModel": {
+    "events": [
+      {
+        "name": "CreateAccount",
+        "emitter": "account-management",
+        "description": "PROBLEMA NAMING: dovrebbe essere AccountCreated (passato)",
+        "payload": {
+          "accountId": "IBAN",
+          "customerId": "UUID",
+          "currency": "Currency"
+        },
+        "consumers": ["card-services", "compliance"]
+      },
+      {
+        "name": "TransferMoney",
+        "emitter": "payment-processing",
+        "description": "PROBLEMA NAMING: dovrebbe essere MoneyTransferred (passato)",
+        "payload": {
+          "paymentId": "UUID",
+          "sourceAccount": "IBAN",
+          "destinationAccount": "IBAN",
+          "amount": "Money"
+        },
+        "consumers": ["account-management", "compliance"]
+      },
+      {
+        "name": "AuthorizeCard",
+        "emitter": "card-services",
+        "description": "PROBLEMA NAMING: dovrebbe essere CardAuthorized (passato)",
+        "payload": {
+          "authorizationId": "UUID",
+          "cardId": "UUID",
+          "amount": "Money",
+          "merchant": "String"
+        },
+        "consumers": ["account-management"]
+      },
+      {
+        "name": "AlertRaised",
+        "emitter": "compliance",
+        "description": "Alert antiriciclaggio generato — questo evento e corretto (passato)",
+        "payload": {
+          "alertId": "UUID",
+          "customerId": "UUID",
+          "riskScore": "Integer"
+        },
+        "consumers": ["account-management"]
+      }
+    ],
+    "patterns": {
+      "primary": "pub-sub",
+      "messaging": {
+        "broker": "Apache Kafka",
+        "guarantees": "at-least-once"
+      },
+      "communication": "async-only"
+    }
+  },
+
+  "contextIntegrations": [
+    {
+      "upstream": "payment-processing",
+      "downstream": "account-management",
+      "relationship": "customer-supplier",
+      "integrationPattern": "event-driven",
+      "communication": "async",
+      "description": "PROBLEMA PATTERN: FR-PAY-001 richiede verifica sincrona del saldo, ma qui la comunicazione e solo asincrona"
+    },
+    {
+      "upstream": "card-services",
+      "downstream": "account-management",
+      "relationship": "customer-supplier",
+      "integrationPattern": "event-driven",
+      "communication": "async",
+      "description": "PROBLEMA PATTERN: FR-CARD-001 richiede autorizzazione sincrona in 2 secondi, ma integrazione e asincrona"
+    },
+    {
+      "upstream": "account-management",
+      "downstream": "compliance",
+      "relationship": "customer-supplier",
+      "integrationPattern": "event-driven",
+      "communication": "async",
+      "description": "Ogni transazione notifica il modulo compliance per verifica AML"
+    }
+  ],
+
+  "additionalContext": {
+    "businessGoals": [
+      "Lanciare conto corrente digitale entro Q3",
+      "Ottenere 50.000 clienti nel primo anno",
+      "Zero sanzioni regolamentari"
+    ],
+    "constraints": [
+      "Regolamentazione Banca d'Italia e BCE",
+      "PSD2 Strong Customer Authentication",
+      "Data residency in EU"
+    ],
+    "assumptions": [
+      "Volume: ~50.000 transazioni/giorno",
+      "Picchi: stipendi fine mese",
+      "99.99% uptime richiesto per servizi di pagamento"
+    ]
+  }
+}

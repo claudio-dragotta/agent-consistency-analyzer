@@ -4,122 +4,131 @@
     "version": "1.0",
     "createdAt": "2025-12-17T10:00:00Z",
     "createdBy": "agent-1-interviewer",
-    "projectName": "E-Commerce Platform",
-    "description": "Modello di esempio con 3 problemi intenzionali per demo"
+    "projectName": "E-Commerce Platform (Demo)",
+    "description": "Modello di esempio compatto con 3 problemi intenzionali per demo: entity overlap (Product), requirement conflict (immutabile vs modificabile), evento con doppio emitter"
   },
+
+  "businessContext": {
+    "objectives": [
+      "Aumentare tasso conversione checkout",
+      "Ridurre errori negli ordini",
+      "Migliorare esperienza utente"
+    ],
+    "boundaries": [
+      "Sistema legacy esistente per inventory",
+      "Budget limitato per infrastruttura cloud",
+      "Team piccolo (3 sviluppatori)"
+    ]
+  },
+
   "domainMap": {
     "coreDomains": [
       {
+        "id": "order-management",
         "name": "Order Management",
-        "classification": "CORE",
-        "valueProposition": "Gestione completa del ciclo vita degli ordini clienti",
-        "boundedContexts": [
+        "type": "core",
+        "description": "Gestione completa del ciclo vita degli ordini clienti",
+        "boundedContext": {
+          "name": "OrderContext",
+          "ubiquitousLanguage": {
+            "Order": "Richiesta di acquisto da parte del cliente",
+            "OrderItem": "Singolo articolo nell'ordine",
+            "Product": "Prodotto ordinato dal cliente"
+          }
+        },
+        "entities": [
           {
-            "name": "OrderContext",
-            "description": "Contesto per gestione ordini",
-            "ubiquitousLanguage": {
-              "Order": "Richiesta di acquisto da parte del cliente",
-              "OrderItem": "Singolo articolo nell'ordine",
-              "Product": "Prodotto ordinato dal cliente"
-            },
-            "entities": [
-              {
-                "name": "Order",
-                "type": "ENTITY",
-                "description": "Ordine del cliente",
-                "attributes": ["orderId", "customerId", "orderDate", "status", "totalAmount"],
-                "invariants": ["Total must be positive", "Must have at least one item"]
-              },
-              {
-                "name": "Product",
-                "type": "ENTITY",
-                "description": "Prodotto ordinato",
-                "attributes": ["productId", "name", "price", "quantity"]
-              }
+            "name": "Order",
+            "type": "aggregate-root",
+            "identity": "orderId (UUID)",
+            "lifecycle": ["Draft", "Confirmed", "Paid", "Shipped", "Delivered", "Cancelled"],
+            "attributes": [
+              {"name": "orderId", "type": "UUID", "required": true},
+              {"name": "customerId", "type": "UUID", "required": true},
+              {"name": "orderDate", "type": "DateTime", "required": true},
+              {"name": "status", "type": "OrderStatus", "required": true},
+              {"name": "totalAmount", "type": "Money", "required": true}
             ],
-            "valueObjects": [
-              {
-                "name": "Address",
-                "type": "VALUE_OBJECT",
-                "description": "Indirizzo di spedizione",
-                "attributes": ["street", "city", "postalCode", "country"]
-              }
-            ],
-            "aggregates": [
-              {
-                "name": "OrderAggregate",
-                "root": "Order",
-                "entities": ["Order", "Product"],
-                "valueObjects": ["Address"]
-              }
+            "invariants": [
+              "Total must be positive",
+              "Must have at least one item"
+            ]
+          },
+          {
+            "name": "Product",
+            "type": "entity",
+            "identity": "productId (UUID)",
+            "attributes": [
+              {"name": "productId", "type": "UUID", "required": true},
+              {"name": "name", "type": "String", "required": true},
+              {"name": "price", "type": "Money", "required": true},
+              {"name": "quantity", "type": "Integer", "required": true}
+            ]
+          }
+        ],
+        "valueObjects": [
+          {
+            "name": "Address",
+            "attributes": [
+              {"name": "street", "type": "String"},
+              {"name": "city", "type": "String"},
+              {"name": "postalCode", "type": "String"},
+              {"name": "country", "type": "String"}
             ]
           }
         ],
         "functionalRequirements": [
           {
             "id": "FR-ORD-001",
-            "description": "Gli ordini devono essere immutabili dopo la conferma",
-            "priority": "HIGH",
-            "rationale": "Garantire integrità dati per fatturazione e spedizione"
+            "description": "Gli ordini devono essere immutabili dopo la conferma - cannot be changed for any reason",
+            "priority": "must-have"
           },
           {
             "id": "FR-ORD-002",
-            "description": "Gli utenti possono modificare gli ordini entro 24 ore dalla creazione",
-            "priority": "HIGH",
-            "rationale": "Permettere correzioni errori da parte del cliente"
-          }
-        ],
-        "nonFunctionalRequirements": [
-          {
-            "id": "NFR-ORD-001",
-            "category": "PERFORMANCE",
-            "description": "Creazione ordine deve completarsi in meno di 2 secondi"
+            "description": "Gli utenti possono modificare gli ordini entro 24 ore dalla creazione, which modifies the order total",
+            "priority": "must-have"
           }
         ]
       },
       {
+        "id": "product-catalog",
         "name": "Product Catalog",
-        "classification": "CORE",
-        "valueProposition": "Catalogo prodotti completo e sempre aggiornato",
-        "boundedContexts": [
+        "type": "core",
+        "description": "Catalogo prodotti completo e sempre aggiornato",
+        "boundedContext": {
+          "name": "CatalogContext",
+          "ubiquitousLanguage": {
+            "Product": "Articolo disponibile nel catalogo",
+            "Category": "Categoria merceologica del prodotto",
+            "Inventory": "Disponibilita in magazzino"
+          }
+        },
+        "entities": [
           {
-            "name": "CatalogContext",
-            "description": "Contesto per gestione catalogo prodotti",
-            "ubiquitousLanguage": {
-              "Product": "Articolo disponibile nel catalogo",
-              "Category": "Categoria merceologica del prodotto",
-              "Inventory": "Disponibilità in magazzino"
-            },
-            "entities": [
-              {
-                "name": "Product",
-                "type": "ENTITY",
-                "description": "Prodotto nel catalogo",
-                "attributes": ["productId", "name", "description", "price", "category", "stock"],
-                "invariants": ["Price must be positive", "Stock cannot be negative"]
-              },
-              {
-                "name": "Category",
-                "type": "ENTITY",
-                "description": "Categoria prodotto",
-                "attributes": ["categoryId", "name", "parentCategory"]
-              }
+            "name": "Product",
+            "type": "aggregate-root",
+            "identity": "productId (UUID)",
+            "attributes": [
+              {"name": "productId", "type": "UUID", "required": true},
+              {"name": "name", "type": "String", "required": true},
+              {"name": "description", "type": "String", "required": true},
+              {"name": "price", "type": "Money", "required": true},
+              {"name": "category", "type": "String", "required": true},
+              {"name": "stock", "type": "Integer", "required": true}
             ],
-            "valueObjects": [
-              {
-                "name": "Price",
-                "type": "VALUE_OBJECT",
-                "description": "Prezzo con valuta",
-                "attributes": ["amount", "currency"]
-              }
-            ],
-            "aggregates": [
-              {
-                "name": "ProductAggregate",
-                "root": "Product",
-                "entities": ["Product", "Category"],
-                "valueObjects": ["Price"]
-              }
+            "invariants": [
+              "Price must be positive",
+              "Stock cannot be negative"
+            ]
+          },
+          {
+            "name": "Category",
+            "type": "aggregate-root",
+            "identity": "categoryId (UUID)",
+            "attributes": [
+              {"name": "categoryId", "type": "UUID", "required": true},
+              {"name": "name", "type": "String", "required": true},
+              {"name": "parentCategory", "type": "UUID", "required": false}
             ]
           }
         ],
@@ -127,91 +136,128 @@
           {
             "id": "FR-CAT-001",
             "description": "Ogni prodotto deve appartenere a una categoria",
-            "priority": "MEDIUM"
+            "priority": "should-have"
           },
           {
             "id": "FR-CAT-002",
             "description": "I prezzi devono essere aggiornabili in tempo reale",
-            "priority": "HIGH"
+            "priority": "must-have"
           }
         ]
       }
     ],
     "supportingDomains": [
       {
+        "id": "inventory-management",
         "name": "Inventory Management",
-        "classification": "SUPPORTING",
-        "valueProposition": "Gestione stock e disponibilità prodotti"
+        "type": "supporting",
+        "description": "Gestione stock e disponibilita prodotti",
+        "supportsCoreDomains": ["product-catalog", "order-management"],
+        "boundedContext": {
+          "name": "InventoryContext",
+          "ubiquitousLanguage": {
+            "Stock": "Quantita disponibile di un prodotto",
+            "Reservation": "Prenotazione temporanea di stock per un ordine"
+          }
+        },
+        "entities": [
+          {
+            "name": "StockItem",
+            "type": "aggregate-root",
+            "identity": "stockItemId (UUID)",
+            "attributes": [
+              {"name": "stockItemId", "type": "UUID", "required": true},
+              {"name": "productId", "type": "UUID", "required": true},
+              {"name": "quantity", "type": "Integer", "required": true}
+            ]
+          }
+        ],
+        "functionalRequirements": [
+          {
+            "id": "FR-INV-001",
+            "description": "Riservare stock quando un ordine viene creato",
+            "priority": "must-have"
+          }
+        ]
       }
-    ]
+    ],
+    "genericDomains": []
   },
+
   "eventDrivenModel": {
     "events": [
       {
         "name": "OrderCreated",
-        "description": "Ordine creato da cliente",
-        "emitters": ["OrderService", "PaymentService"],
-        "subscribers": ["InventoryService", "ShippingService", "NotificationService"],
+        "emitter": "order-management",
+        "description": "Ordine creato da cliente - PROBLEMA: anche PaymentService lo emette",
         "payload": {
-          "orderId": "string (UUID)",
-          "customerId": "string (UUID)",
-          "items": "array of OrderItem",
-          "totalAmount": "number",
-          "createdAt": "timestamp"
+          "orderId": "UUID",
+          "customerId": "UUID",
+          "items": "List<OrderItem>",
+          "totalAmount": "Money",
+          "createdAt": "DateTime"
         },
-        "trigger": "Customer completes checkout"
+        "consumers": ["inventory-management"]
+      },
+      {
+        "name": "OrderCreated",
+        "emitter": "product-catalog",
+        "description": "DUPLICATE EMITTER: stesso evento emesso da due domini diversi",
+        "payload": {
+          "orderId": "UUID",
+          "products": "List"
+        },
+        "consumers": ["inventory-management"]
       },
       {
         "name": "OrderConfirmed",
+        "emitter": "order-management",
         "description": "Ordine confermato dopo pagamento",
-        "emitters": ["PaymentService"],
-        "subscribers": ["OrderService", "ShippingService"],
         "payload": {
-          "orderId": "string (UUID)",
-          "paymentId": "string (UUID)",
-          "confirmedAt": "timestamp"
+          "orderId": "UUID",
+          "confirmedAt": "DateTime"
         },
-        "trigger": "Payment successful"
+        "consumers": ["inventory-management"]
       },
       {
         "name": "ProductAdded",
+        "emitter": "product-catalog",
         "description": "Nuovo prodotto aggiunto al catalogo",
-        "emitters": ["CatalogService"],
-        "subscribers": ["SearchService", "RecommendationService"],
         "payload": {
-          "productId": "string (UUID)",
-          "name": "string",
-          "category": "string",
-          "price": "number",
-          "addedAt": "timestamp"
+          "productId": "UUID",
+          "name": "String",
+          "category": "String",
+          "price": "Money"
         },
-        "trigger": "Admin adds new product"
+        "consumers": ["inventory-management"]
       }
     ],
-    "communicationPatterns": [
-      {
-        "sourceContext": "OrderContext",
-        "targetContext": "InventoryContext",
-        "pattern": "EVENT_DRIVEN",
-        "description": "Ordini notificano inventory per aggiornamento stock",
-        "events": ["OrderCreated", "OrderCancelled"]
-      },
-      {
-        "sourceContext": "OrderContext",
-        "targetContext": "PaymentContext",
-        "pattern": "SYNCHRONOUS_API",
-        "description": "Verifica disponibilità fondi in modo sincrono prima di confermare ordine",
-        "timeout": "5s"
-      },
-      {
-        "sourceContext": "CatalogContext",
-        "targetContext": "OrderContext",
-        "pattern": "SHARED_DATABASE",
-        "description": "Condivisione dati prodotto tra catalogo e ordini",
-        "concerns": "Possibile accoppiamento forte"
+    "patterns": {
+      "primary": "pub-sub",
+      "messaging": {
+        "broker": "Apache Kafka",
+        "guarantees": "at-least-once"
       }
-    ]
+    }
   },
+
+  "contextIntegrations": [
+    {
+      "upstream": "order-management",
+      "downstream": "inventory-management",
+      "relationship": "customer-supplier",
+      "integrationPattern": "event-driven",
+      "description": "Ordini notificano inventory per aggiornamento stock"
+    },
+    {
+      "upstream": "product-catalog",
+      "downstream": "order-management",
+      "relationship": "conformist",
+      "integrationPattern": "sync-query",
+      "description": "Condivisione dati prodotto tra catalogo e ordini"
+    }
+  ],
+
   "additionalContext": {
     "businessGoals": [
       "Aumentare tasso conversione checkout",

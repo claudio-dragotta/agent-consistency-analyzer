@@ -1,0 +1,370 @@
+{
+  "metadata": {
+    "modelId": "dm-healthcare-001",
+    "version": "1.0",
+    "createdAt": "2026-02-13T10:00:00Z",
+    "createdBy": "agent-1-interviewer",
+    "projectName": "Hospital Management System",
+    "description": "Modello DDD per gestione ospedaliera con 4 problemi intenzionali: Patient entity in 3 contesti (ENTITY_OVERLAP), Visita ambigua tra appuntamento e referto (SEMANTIC_AMBIGUITY), Authentication classificato come Core (MISCLASSIFIED_DOMAIN), Record duplicato tra due domini (ENTITY_OVERLAP)"
+  },
+
+  "businessContext": {
+    "objectives": [
+      "Digitalizzare la gestione delle visite ambulatoriali",
+      "Centralizzare le cartelle cliniche elettroniche",
+      "Automatizzare la fatturazione delle prestazioni sanitarie"
+    ],
+    "boundaries": [
+      "Solo ambulatorio — no pronto soccorso",
+      "Singolo presidio ospedaliero",
+      "Integrazione con SSN per codici esenzione"
+    ]
+  },
+
+  "domainMap": {
+    "coreDomains": [
+      {
+        "id": "clinical-management",
+        "name": "Clinical Management",
+        "type": "core",
+        "description": "Gestione delle visite cliniche, diagnosi e piani terapeutici",
+        "boundedContext": {
+          "name": "ClinicalContext",
+          "ubiquitousLanguage": {
+            "Patient": "Persona in cura presso l'ambulatorio",
+            "Visit": "Appuntamento del paziente con il medico",
+            "Diagnosis": "Valutazione clinica della condizione del paziente"
+          }
+        },
+        "entities": [
+          {
+            "name": "Patient",
+            "type": "aggregate-root",
+            "identity": "patientId (UUID)",
+            "attributes": [
+              {"name": "patientId", "type": "UUID", "required": true},
+              {"name": "firstName", "type": "String", "required": true},
+              {"name": "lastName", "type": "String", "required": true},
+              {"name": "dateOfBirth", "type": "Date", "required": true},
+              {"name": "fiscalCode", "type": "String", "required": true},
+              {"name": "allergies", "type": "List<String>", "required": false}
+            ],
+            "invariants": [
+              "Fiscal code must be unique",
+              "Date of birth must be in the past"
+            ]
+          },
+          {
+            "name": "Visit",
+            "type": "entity",
+            "identity": "visitId (UUID)",
+            "attributes": [
+              {"name": "visitId", "type": "UUID", "required": true},
+              {"name": "patientId", "type": "UUID", "required": true},
+              {"name": "doctorId", "type": "UUID", "required": true},
+              {"name": "scheduledAt", "type": "DateTime", "required": true},
+              {"name": "status", "type": "VisitStatus", "required": true}
+            ]
+          },
+          {
+            "name": "Diagnosis",
+            "type": "entity",
+            "identity": "diagnosisId (UUID)",
+            "attributes": [
+              {"name": "diagnosisId", "type": "UUID", "required": true},
+              {"name": "icdCode", "type": "String", "required": true},
+              {"name": "description", "type": "String", "required": true},
+              {"name": "severity", "type": "String", "required": true}
+            ]
+          }
+        ],
+        "valueObjects": [
+          {
+            "name": "VitalSigns",
+            "attributes": [
+              {"name": "bloodPressure", "type": "String"},
+              {"name": "heartRate", "type": "Integer"},
+              {"name": "temperature", "type": "Decimal"}
+            ]
+          }
+        ],
+        "functionalRequirements": [
+          {
+            "id": "FR-CLI-001",
+            "description": "Il medico deve poter registrare diagnosi e prescrizioni durante la visita",
+            "priority": "must-have"
+          },
+          {
+            "id": "FR-CLI-002",
+            "description": "Le allergie del paziente devono essere visibili in ogni momento durante la visita",
+            "priority": "must-have"
+          }
+        ]
+      },
+      {
+        "id": "medical-records",
+        "name": "Medical Records",
+        "type": "core",
+        "description": "Archivio cartelle cliniche elettroniche e storico referti",
+        "boundedContext": {
+          "name": "RecordsContext",
+          "ubiquitousLanguage": {
+            "Patient": "Titolare della cartella clinica",
+            "Visit": "Referto medico prodotto a seguito di un consulto",
+            "MedicalHistory": "Storico completo delle condizioni del paziente"
+          }
+        },
+        "entities": [
+          {
+            "name": "Patient",
+            "type": "aggregate-root",
+            "identity": "patientId (UUID)",
+            "attributes": [
+              {"name": "patientId", "type": "UUID", "required": true},
+              {"name": "firstName", "type": "String", "required": true},
+              {"name": "lastName", "type": "String", "required": true},
+              {"name": "fiscalCode", "type": "String", "required": true},
+              {"name": "medicalHistory", "type": "List<Record>", "required": false},
+              {"name": "bloodType", "type": "String", "required": false}
+            ],
+            "invariants": [
+              "Medical records are append-only — cannot be deleted",
+              "Each record must reference a valid visit"
+            ]
+          },
+          {
+            "name": "Visit",
+            "type": "entity",
+            "identity": "visitId (UUID)",
+            "attributes": [
+              {"name": "visitId", "type": "UUID", "required": true},
+              {"name": "patientId", "type": "UUID", "required": true},
+              {"name": "report", "type": "String", "required": true},
+              {"name": "attachments", "type": "List<Attachment>", "required": false},
+              {"name": "signedBy", "type": "UUID", "required": true},
+              {"name": "signedAt", "type": "DateTime", "required": true}
+            ]
+          },
+          {
+            "name": "Record",
+            "type": "entity",
+            "identity": "recordId (UUID)",
+            "attributes": [
+              {"name": "recordId", "type": "UUID", "required": true},
+              {"name": "type", "type": "RecordType", "required": true},
+              {"name": "content", "type": "String", "required": true},
+              {"name": "createdAt", "type": "DateTime", "required": true}
+            ]
+          }
+        ],
+        "functionalRequirements": [
+          {
+            "id": "FR-REC-001",
+            "description": "I referti firmati non possono essere modificati, solo annullati con nuovo referto sostitutivo",
+            "priority": "must-have"
+          },
+          {
+            "id": "FR-REC-002",
+            "description": "Il paziente deve poter accedere ai propri referti tramite portale web",
+            "priority": "should-have"
+          }
+        ]
+      },
+      {
+        "id": "authentication",
+        "name": "Authentication & Access Control",
+        "type": "core",
+        "description": "PROBLEMA: classificato come Core ma dovrebbe essere Generic — l'autenticazione non e' un differenziatore di business per un ospedale",
+        "boundedContext": {
+          "name": "AuthContext",
+          "ubiquitousLanguage": {
+            "User": "Utente del sistema (medico, infermiere, admin)",
+            "Role": "Ruolo con permessi specifici",
+            "Session": "Sessione autenticata attiva"
+          }
+        },
+        "entities": [
+          {
+            "name": "User",
+            "type": "aggregate-root",
+            "identity": "userId (UUID)",
+            "attributes": [
+              {"name": "userId", "type": "UUID", "required": true},
+              {"name": "username", "type": "String", "required": true},
+              {"name": "passwordHash", "type": "String", "required": true},
+              {"name": "role", "type": "Role", "required": true}
+            ]
+          },
+          {
+            "name": "Role",
+            "type": "entity",
+            "identity": "roleId (String)",
+            "attributes": [
+              {"name": "roleId", "type": "String", "required": true},
+              {"name": "permissions", "type": "List<String>", "required": true}
+            ]
+          }
+        ],
+        "functionalRequirements": [
+          {
+            "id": "FR-AUTH-001",
+            "description": "Login con username e password, sessione con scadenza a 8 ore",
+            "priority": "must-have"
+          }
+        ]
+      }
+    ],
+    "supportingDomains": [
+      {
+        "id": "billing",
+        "name": "Billing & Invoicing",
+        "type": "supporting",
+        "description": "Fatturazione prestazioni sanitarie e gestione pagamenti",
+        "supportsCoreDomains": ["clinical-management"],
+        "boundedContext": {
+          "name": "BillingContext",
+          "ubiquitousLanguage": {
+            "Patient": "Soggetto pagante della prestazione",
+            "Invoice": "Documento fiscale per la prestazione erogata",
+            "Payment": "Pagamento effettuato dal paziente"
+          }
+        },
+        "entities": [
+          {
+            "name": "Patient",
+            "type": "entity",
+            "identity": "patientId (UUID)",
+            "attributes": [
+              {"name": "patientId", "type": "UUID", "required": true},
+              {"name": "firstName", "type": "String", "required": true},
+              {"name": "lastName", "type": "String", "required": true},
+              {"name": "fiscalCode", "type": "String", "required": true},
+              {"name": "exemptionCode", "type": "String", "required": false},
+              {"name": "insuranceId", "type": "String", "required": false}
+            ]
+          },
+          {
+            "name": "Invoice",
+            "type": "aggregate-root",
+            "identity": "invoiceId (UUID)",
+            "attributes": [
+              {"name": "invoiceId", "type": "UUID", "required": true},
+              {"name": "patientId", "type": "UUID", "required": true},
+              {"name": "amount", "type": "Decimal", "required": true},
+              {"name": "items", "type": "List<InvoiceItem>", "required": true},
+              {"name": "status", "type": "InvoiceStatus", "required": true}
+            ]
+          }
+        ],
+        "functionalRequirements": [
+          {
+            "id": "FR-BIL-001",
+            "description": "Generare automaticamente la fattura al completamento della visita",
+            "priority": "must-have"
+          }
+        ]
+      }
+    ],
+    "genericDomains": []
+  },
+
+  "eventDrivenModel": {
+    "events": [
+      {
+        "name": "VisitScheduled",
+        "emitter": "clinical-management",
+        "description": "Nuova visita prenotata per un paziente",
+        "payload": {
+          "visitId": "UUID",
+          "patientId": "UUID",
+          "doctorId": "UUID",
+          "scheduledAt": "DateTime"
+        },
+        "consumers": ["billing"]
+      },
+      {
+        "name": "VisitCompleted",
+        "emitter": "clinical-management",
+        "description": "Visita conclusa con diagnosi registrata",
+        "payload": {
+          "visitId": "UUID",
+          "patientId": "UUID",
+          "diagnosisId": "UUID"
+        },
+        "consumers": ["medical-records", "billing"]
+      },
+      {
+        "name": "ReportSigned",
+        "emitter": "medical-records",
+        "description": "Referto firmato digitalmente dal medico",
+        "payload": {
+          "visitId": "UUID",
+          "reportId": "UUID",
+          "signedBy": "UUID",
+          "signedAt": "DateTime"
+        },
+        "consumers": ["clinical-management"]
+      },
+      {
+        "name": "InvoiceGenerated",
+        "emitter": "billing",
+        "description": "Fattura emessa per la prestazione",
+        "payload": {
+          "invoiceId": "UUID",
+          "patientId": "UUID",
+          "amount": "Decimal"
+        },
+        "consumers": []
+      }
+    ],
+    "patterns": {
+      "primary": "pub-sub",
+      "messaging": {
+        "broker": "Apache Kafka",
+        "guarantees": "at-least-once"
+      }
+    }
+  },
+
+  "contextIntegrations": [
+    {
+      "upstream": "clinical-management",
+      "downstream": "medical-records",
+      "relationship": "customer-supplier",
+      "integrationPattern": "event-driven",
+      "description": "Le visite completate generano referti nelle cartelle cliniche"
+    },
+    {
+      "upstream": "clinical-management",
+      "downstream": "billing",
+      "relationship": "customer-supplier",
+      "integrationPattern": "event-driven",
+      "description": "Le prestazioni cliniche generano fatture"
+    },
+    {
+      "upstream": "authentication",
+      "downstream": "clinical-management",
+      "relationship": "conformist",
+      "integrationPattern": "sync-query",
+      "description": "Verifica permessi utente prima di ogni operazione clinica"
+    }
+  ],
+
+  "additionalContext": {
+    "businessGoals": [
+      "Ridurre tempi di attesa in ambulatorio",
+      "Eliminare cartelle cartacee entro 12 mesi",
+      "Conformita GDPR per dati sanitari"
+    ],
+    "constraints": [
+      "Dati sensibili — crittografia obbligatoria",
+      "Integrazione con sistema SSN esistente",
+      "Disponibilita 99.9% durante orari ambulatorio"
+    ],
+    "assumptions": [
+      "Volume: ~200 visite/giorno",
+      "5 medici, 10 infermieri",
+      "Singolo presidio per MVP"
+    ]
+  }
+}

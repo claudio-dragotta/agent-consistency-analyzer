@@ -4,7 +4,7 @@
 x-common-env: &common-env
   # Ollama Configuration
   OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-  OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3}
+  OLLAMA_MODEL: ${OLLAMA_MODEL:-mistral:7b}
   OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-120}
 
   # Kafka Configuration
@@ -165,6 +165,8 @@ services:
       - WEBHOOK_URL=http://127.0.0.1:5678/
       - GENERIC_TIMEZONE=Europe/Rome
       - AGENT2_API_URL=http://agent2-api:8002
+      - N8N_PUBLIC_API_DISABLED=false
+      - N8N_PUBLIC_API_KEY=agent2-api-key-12345
     volumes:
       - n8n_data:/home/node/.n8n
       - ./n8n:/backup:ro

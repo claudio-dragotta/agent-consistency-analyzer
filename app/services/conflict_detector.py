@@ -112,19 +112,19 @@ class ConflictDetector:
         url = self.settings.get_ollama_generate_url()
         
         payload = {
-            "model": self.settings.llm_model,
+            "model": self.settings.OLLAMA_MODEL,
             "prompt": prompt,
             "stream": False,
             "options": {
-                "temperature": self.settings.llm_temperature,
-                "num_predict": self.settings.llm_max_tokens
+                "temperature": 0.3,
+                "num_predict": 2048
             }
         }
-        
+
         if system_prompt:
             payload["system"] = system_prompt
-        
-        async with httpx.AsyncClient(timeout=self.settings.llm_timeout) as client:
+
+        async with httpx.AsyncClient(timeout=self.settings.OLLAMA_TIMEOUT) as client:
             try:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
@@ -160,16 +160,19 @@ class ConflictDetector:
         """Extract all events from the domain model."""
         events = []
         event_model = domain_model.get("eventDrivenModel", {})
-        
-        for event in event_model.get("domainEvents", []):
+
+        # Support both "events" and "domainEvents" keys
+        raw_events = event_model.get("events", []) or event_model.get("domainEvents", [])
+
+        for event in raw_events:
             events.append({
                 "name": event.get("name", ""),
-                "emitter": event.get("emittedBy", ""),
-                "consumers": event.get("consumedBy", []),
+                "emitter": event.get("emitter", "") or event.get("emittedBy", ""),
+                "consumers": event.get("consumers", []) or event.get("consumedBy", []),
                 "description": event.get("description", ""),
                 "payload": event.get("payload", [])
             })
-        
+
         return events
     
     def _extract_domains(self, domain_model: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -192,13 +195,18 @@ class ConflictDetector:
     def _extract_integrations(self, domain_model: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Extract context integrations from the domain model."""
         integrations = []
-        domain_map = domain_model.get("domainMap", {})
-        
-        for integration in domain_map.get("contextIntegrations", []):
+
+        # Support both top-level and domainMap-nested contextIntegrations
+        raw = (
+            domain_model.get("contextIntegrations", [])
+            or domain_model.get("domainMap", {}).get("contextIntegrations", [])
+        )
+
+        for integration in raw:
             integrations.append({
                 "upstream": integration.get("upstream", ""),
                 "downstream": integration.get("downstream", ""),
-                "pattern": integration.get("pattern", ""),
+                "pattern": integration.get("integrationPattern", "") or integration.get("pattern", ""),
                 "communication": integration.get("communication", "")
             })
         
@@ -620,6 +628,21 @@ Return ONLY a valid JSON array of issues found. No markdown, no explanation."""
         
         return issues
     
+    def _get_resolved_elements(self, domain_model: Dict[str, Any]) -> set:
+        """Extract element names that have already been resolved by user answers."""
+        resolved = set()
+        for fix in domain_model.get("_userGuidedFixes", []):
+            for elem in fix.get("affected_elements", []):
+                resolved.add(elem.lower())
+        for decision in domain_model.get("_ownershipDecisions", []):
+            entity = decision.get("entity", "")
+            if entity:
+                resolved.add(entity.lower())
+        for resolution in domain_model.get("_conflictResolutions", []):
+            for elem in resolution.get("affected_elements", []):
+                resolved.add(elem.lower())
+        return resolved
+
     async def analyze(
         self,
         domain_model: Dict[str, Any],
@@ -627,48 +650,52 @@ Return ONLY a valid JSON array of issues found. No markdown, no explanation."""
     ) -> List[ConflictIssue]:
         """
         Perform full conflict analysis on a domain model.
-        
+
         Args:
             domain_model: The domain model JSON to analyze
             use_llm: Whether to also use LLM for analysis
-            
+
         Returns:
             List of all detected conflict issues
         """
         logger.info("Starting conflict detection...")
-        
+
+        resolved = self._get_resolved_elements(domain_model)
+        if resolved:
+            logger.info(f"Skipping already-resolved elements: {resolved}")
+
         issues = []
-        
+
         # Extract model components
         requirements = self._extract_requirements(domain_model)
         events = self._extract_events(domain_model)
         domains = self._extract_domains(domain_model)
         integrations = self._extract_integrations(domain_model)
-        
+
         logger.info(f"Extracted: {len(requirements)} requirements, {len(events)} events, "
                    f"{len(domains)} domains, {len(integrations)} integrations")
-        
+
         # Rule-based detection
         req_conflicts = self.detect_requirement_conflicts(requirements)
         issues.extend(req_conflicts)
         logger.info(f"Found {len(req_conflicts)} requirement conflicts")
-        
+
         dup_events = self.detect_duplicate_events(events)
         issues.extend(dup_events)
         logger.info(f"Found {len(dup_events)} duplicate events")
-        
+
         naming_issues = self.detect_naming_violations(events)
         issues.extend(naming_issues)
         logger.info(f"Found {len(naming_issues)} naming violations")
-        
+
         pattern_issues = self.detect_incompatible_patterns(requirements, integrations)
         issues.extend(pattern_issues)
         logger.info(f"Found {len(pattern_issues)} incompatible patterns")
-        
+
         domain_issues = self.detect_misclassified_domains(domains)
         issues.extend(domain_issues)
         logger.info(f"Found {len(domain_issues)} misclassified domains")
-        
+
         # Optional LLM-based detection
         if use_llm:
             try:
@@ -684,6 +711,17 @@ Return ONLY a valid JSON array of issues found. No markdown, no explanation."""
                 logger.info(f"LLM found {len(llm_issues)} additional issues")
             except Exception as e:
                 logger.warning(f"LLM analysis skipped due to error: {e}")
-        
+
+        # Filter out issues whose affected elements are ALL already resolved
+        if resolved:
+            before = len(issues)
+            issues = [
+                issue for issue in issues
+                if not all(elem.lower() in resolved for elem in issue.affected_elements)
+            ]
+            filtered = before - len(issues)
+            if filtered:
+                logger.info(f"Filtered {filtered} already-resolved issues")
+
         logger.info(f"Conflict detection complete. Total issues: {len(issues)}")
         return issues
