@@ -453,18 +453,38 @@ class SemanticAnalyzer:
         return issues
     
     def _get_resolved_elements(self, domain_model: Dict[str, Any]) -> set:
-        """Extract element names that have already been resolved by user answers."""
+        """
+        Extract element names that have been ACTUALLY resolved.
+
+        Only counts fixes where applied=True (real structural changes were made).
+        Fixes with applied=False stay open so the issue gets re-asked.
+        """
         resolved = set()
+
+        # Only count user fixes that were actually applied
         for fix in domain_model.get("_userGuidedFixes", []):
+            if not fix.get("applied", False):
+                continue
             for elem in fix.get("affected_elements", []):
-                resolved.add(elem.lower())
+                resolved.add(elem.strip().lower())
+
+        # Ownership decisions = real structural changes
         for decision in domain_model.get("_ownershipDecisions", []):
-            entity = decision.get("entity", "")
+            entity = decision.get("entity", "").strip().lower()
             if entity:
-                resolved.add(entity.lower())
+                resolved.add(entity)
+
+        # Conflict resolutions = explicit user decisions
         for resolution in domain_model.get("_conflictResolutions", []):
             for elem in resolution.get("affected_elements", []):
-                resolved.add(elem.lower())
+                resolved.add(elem.strip().lower())
+
+        # Context mappings = real structural changes
+        for mapping in domain_model.get("_contextMappings", []):
+            entity = mapping.get("entity", "").strip().lower()
+            if entity:
+                resolved.add(entity)
+
         return resolved
 
     def analyze(self, domain_model: Dict[str, Any]) -> List[SemanticIssue]:

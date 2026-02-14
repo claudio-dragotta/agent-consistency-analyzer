@@ -54,7 +54,45 @@ Agent 2 riceve un domain model JSON, lo analizza per coerenza semantica, rileva 
 
 ### Infrastruttura Docker Compose
 
-Lo stack Docker Compose orchestra **6 servizi** su una rete bridge dedicata (`agent2-network`, subnet `172.28.0.0/16`).
+Lo stack Docker e suddiviso in **due file** per separare i servizi core (usati nel flusso attuale) dai servizi Kafka (predisposti per implementazione futura).
+
+#### Struttura dei file Docker Compose
+
+| File | Servizi | Quando usarlo |
+|------|---------|---------------|
+| `docker-compose.yml` | agent2-api, n8n | **Sempre** — flusso interattivo REST (default) |
+| `docker-compose.kafka.yml` | zookeeper, kafka, agent2-consumer, kafka-ui | **Solo** se si attiva la pipeline automatica Agent1 → Agent2 → Agent3 via Kafka |
+
+**Comandi**:
+
+```bash
+# Flusso standard (solo REST): 2 container
+docker compose up -d --build
+
+# Flusso completo con Kafka: 6 container
+docker compose -f docker-compose.yml -f docker-compose.kafka.yml up -d --build
+```
+
+#### Diagramma — Flusso REST (default)
+
+```
+┌──────────────────────────────────────────────────┐
+│                agent2-network (bridge)             │
+│                                                    │
+│    ┌────────────┐         ┌──────────┐            │
+│    │ agent2-api │◄────────│   n8n    │            │
+│    │   :8002    │  HTTP   │  :5678   │            │
+│    └─────┬──────┘         └──────────┘            │
+│          │ host.docker.internal                    │
+└──────────┼─────────────────────────────────────────┘
+           ▼
+    ┌────────────┐
+    │   Ollama   │  (host Windows, accesso diretto GPU)
+    │  :11434    │
+    └────────────┘
+```
+
+#### Diagramma — Flusso completo con Kafka (implementazione futura)
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -79,16 +117,23 @@ Lo stack Docker Compose orchestra **6 servizi** su una rete bridge dedicata (`ag
                   └────────────┘
 ```
 
-#### Servizi e motivazioni
+#### Servizi core (`docker-compose.yml`)
+
+| Servizio | Immagine | Porta | Perche esiste |
+|----------|----------|-------|---------------|
+| **agent2-api** | Build da `Dockerfile` locale | 8002 | **Cuore dell'applicazione**: FastAPI con 13 endpoint (`/analyze`, `/source/files`, `/health`, A2A). Chiamato da n8n per il loop interattivo e da Agent 1/3 via A2A. Limiti: 2 CPU, 2GB RAM. |
+| **n8n** | `n8nio/n8n:latest` | 5678 | **Orchestratore workflow interattivo**: gestisce il loop ricorsivo (scelta file → analisi → form domande → reinvio risposte → ri-analisi fino a VALID). Comunica con agent2-api via HTTP interno (`http://agent2-api:8002`). |
+
+#### Servizi Kafka (`docker-compose.kafka.yml`) — implementazione futura
 
 | Servizio | Immagine | Porta | Perche esiste |
 |----------|----------|-------|---------------|
 | **Zookeeper** | `confluentinc/cp-zookeeper:7.5.0` | 2181 (interna) | Kafka richiede Zookeeper per coordinare i broker (leader election, metadata dei topic). Non esposto all'esterno — solo Kafka lo contatta. |
-| **Kafka** | `confluentinc/cp-kafka:7.5.0` | 9092 (interno), 9093 (host) | **Message broker** per la comunicazione A2A. Agent 1 pubblica su `agent1-output`, Agent 2 consuma e pubblica su `agent2-output` per Agent 3. 4 partizioni per topic, retention 7 giorni. La porta 9092 e per i container, 9093 per accesso dall'host. |
-| **agent2-api** | Build da `Dockerfile` locale | 8002 | **Cuore dell'applicazione**: FastAPI con 13 endpoint (`/analyze`, `/source/files`, `/health`, A2A). Chiamato da n8n per il loop interattivo e da Agent 1/3 via A2A. Limiti: 2 CPU, 2GB RAM. |
+| **Kafka** | `confluentinc/cp-kafka:7.5.0` | 9092 (interno), 9093 (host) | **Message broker** per la comunicazione A2A. Agent 1 pubblica su `agent1-output`, Agent 2 consuma e pubblica su `agent2-output` per Agent 3. 4 partizioni per topic, retention 7 giorni. |
 | **agent2-consumer** | Stessa immagine di agent2-api | — | **Consumer Kafka parallelo**: ascolta `agent1-output` e processa automaticamente i domain model in arrivo da Agent 1. Usa `use_llm=False` per velocita. Scalabile a N repliche con `CONSUMER_REPLICAS`. Limiti: 4 CPU, 4GB RAM. |
-| **n8n** | `n8nio/n8n:latest` | 5678 | **Orchestratore workflow interattivo**: gestisce il loop ricorsivo (scelta file → analisi → form domande → reinvio risposte → ri-analisi fino a VALID). Comunica con agent2-api via HTTP interno (`http://agent2-api:8002`). |
-| **kafka-ui** | `provectuslabs/kafka-ui:latest` | 8085 | **Dashboard di monitoraggio**: interfaccia web per ispezionare topic, messaggi, consumer group e lag. Utile per debug — non necessario in produzione. |
+| **kafka-ui** | `provectuslabs/kafka-ui:latest` | 8080 | **Dashboard di monitoraggio**: interfaccia web per ispezionare topic, messaggi, consumer group e lag. Utile per debug. |
+
+> **Perche due file separati?** Nel flusso attuale n8n chiama direttamente `http://agent2-api:8002/analyze` via HTTP. I 4 servizi Kafka (Zookeeper, Kafka, consumer, Kafka UI) sono predisposti per la pipeline automatica Agent 1 → Agent 2 → Agent 3, ma non sono utilizzati nel loop interattivo. Separandoli in `docker-compose.kafka.yml` si risparmiano risorse significative (~6GB RAM, 6 CPU) e si avviano solo 2 container invece di 6.
 
 #### Perche due servizi Agent 2 separati?
 
@@ -102,6 +147,19 @@ Questa separazione permette di **scalare indipendentemente**: 1 sola API ma N co
 #### Perche Ollama NON e in Docker?
 
 Ollama gira sull'**host** (macchina Windows) perche ha bisogno di accesso diretto alla GPU (NVIDIA RTX 4070, 8GB VRAM). I container Docker lo raggiungono tramite `host.docker.internal:11434`, alias che Docker Desktop su Windows risolve automaticamente all'IP dell'host.
+
+#### Immagini custom vs prefatte
+
+| Servizio | Tipo immagine | Dettaglio |
+|----------|---------------|-----------|
+| **agent2-api** | **Custom** (build da `Dockerfile`) | Multi-stage build Python 3.11, installa dipendenze del progetto e lancia FastAPI con Uvicorn. Unica immagine costruita da zero per il nostro caso specifico. |
+| **agent2-consumer** | **Custom** (stessa immagine di agent2-api) | Stessa immagine `agent2-consistency-analyzer:latest`, ma con entry point diverso (`python -m app.kafka.consumer_advanced`). |
+| **Zookeeper** | Prefatta (`confluentinc/cp-zookeeper:7.5.0`) | Immagine ufficiale Confluent, usata as-is. Configurata solo tramite variabili d'ambiente. |
+| **Kafka** | Prefatta (`confluentinc/cp-kafka:7.5.0`) | Immagine ufficiale Confluent, usata as-is. Configurata solo tramite variabili d'ambiente. |
+| **n8n** | Prefatta (`n8nio/n8n:latest`) | Immagine ufficiale n8n, usata as-is. I workflow vengono importati manualmente dalla UI. |
+| **kafka-ui** | Prefatta (`provectuslabs/kafka-ui:latest`) | Immagine ufficiale Provectus, usata as-is. Nessuna personalizzazione. |
+
+In sintesi: l'unica immagine Docker costruita da noi e quella dell'Agent 2 (`Dockerfile`). Tutti gli altri servizi usano immagini pubbliche configurate esclusivamente tramite variabili d'ambiente, senza alcuna modifica al codice o all'immagine.
 
 #### Variabili d'ambiente condivise
 
@@ -249,7 +307,12 @@ Dopo i 4 step di analisi, Agent 2 stima quante iterazioni del loop saranno neces
 | 6+ | >= 3 | min(N, 7) |
 | qualsiasi | — | 5 (default) |
 
-**Come viene usato nel workflow n8n**: il nodo "Combina Risultati" legge `suggested_max_iterations` dalla prima risposta API e lo usa come limite del loop. Nelle iterazioni successive, il valore resta fisso (non viene ricalcolato ad ogni giro).
+**Come viene usato nel workflow n8n (v2.0 aggiornato)**:
+
+- `suggested_max_iterations` viene riletto a **ogni iterazione** nel nodo "Combina Risultati" (non solo al primo giro).
+- Il valore viene trasformato in un limite **adattivo**: `max_iterations` viene esteso dinamicamente in base alla stima piu recente.
+- Il check "Max Iterazioni?" e trattato come **soft cap**: se il contatore raggiunge il limite, "Prepara Dati" lo incrementa automaticamente (`max_iterations = iteration + 1`) e il loop continua.
+- Risultato pratico: il workflow non si blocca prematuramente con problemi ancora aperti; continua fino a `status=VALID` (o intervento manuale esterno).
 
 ---
 
@@ -365,11 +428,7 @@ Browser GET /webhook/agent2-start
 [Prepara Dati] <------------------------------------------+
     |
     v
-[Max Iterazioni?] --NO--> [Pagina Max Iterazioni Raggiunte]
-    |
-    YES
-    v
-[POST /analyze] --> [Combina Risultati]
+[Max Iterazioni?] --(soft cap adattivo)--> [POST /analyze] --> [Combina Risultati]
     |
     v
 [Modello Valido?] --SI--> [Pagina Successo]
@@ -379,7 +438,7 @@ Browser GET /webhook/agent2-start
 [Form Domande HTML] --> Utente risponde --> [POST /webhook/agent2-submit]
     |                                              |
     +----------------------------------------------+
-    (loop fino a VALID o max iterazioni)
+    (loop fino a VALID, con limite adattivo)
 ```
 
 **Nodi chiave**:
@@ -389,15 +448,16 @@ Browser GET /webhook/agent2-start
 | START | Webhook GET | Pagina iniziale nel browser |
 | SUBMIT | Webhook POST | Riceve tutte le form submissions |
 | Detect Request Type | Code | Classifica la richiesta (file/answers/initial) |
-| Prepara Dati | Code | Normalizza iteration, session_id, max_iterations |
+| Prepara Dati | Code | Normalizza iteration/sessione e applica soft cap (`max_iterations` si auto-estende quando raggiunto) |
 | Analizza Modello | HTTP Request | `POST http://agent2-api:8002/analyze` |
-| Combina Risultati | Code | Pre-renderizza HTML domande con Buffer.from() |
+| Combina Risultati | Code | Pre-renderizza HTML domande e aggiorna `max_iterations` usando l'ultima `suggested_max_iterations` |
 | Form Domande | Respond to Webhook | Mostra domande con radio buttons + testo libero |
 | Pagina Successo | Respond to Webhook | Risultato finale quando `status=VALID` |
 
 ### Esiti finali del loop
 
-Il loop termina in uno di due modi:
+Il loop termina quando l'API restituisce `status: "VALID"` (0 problemi).  
+Il limite iterazioni e dinamico e viene esteso automaticamente se necessario, quindi non interrompe il flusso in modo definitivo mentre ci sono ancora problemi risolvibili.
 
 #### Modello VALID — Pagina di Successo
 
@@ -413,14 +473,15 @@ Quando l'API restituisce `status: "VALID"` (0 problemi), il workflow mostra una 
 
 Il modello raffinato e anche salvato lato server in `output_agent/validation_{task_id}.json` e, se il percorso Kafka e attivo, pubblicato su `agent2-output` per Agent 3.
 
-#### Max iterazioni raggiunte — Pagina di Errore
+#### Comportamento del limite iterazioni (soft cap)
 
-Se dopo N iterazioni (valore impostato da `suggested_max_iterations` o default 5) il modello presenta ancora problemi, il workflow mostra una pagina rossa con:
+Nel workflow corrente il nodo "Max Iterazioni?" resta come guardrail, ma non e un blocco hard:
 
-- **Numero iterazioni eseguite**: il massimo raggiunto
-- **Consiglio**: rivedere il modello di dominio originale e rieseguire l'analisi
+- se `iteration >= max_iterations`, il nodo "Prepara Dati" estende automaticamente `max_iterations` di almeno 1;
+- il ciclo prosegue con una nuova chiamata `/analyze`;
+- la stima LLM viene riacquisita al giro successivo e il limite si riallinea ai problemi residui.
 
-Questo accade tipicamente quando i problemi sono strutturali e richiedono una riscrittura del modello da parte di Agent 1, non semplici aggiustamenti.
+In questo modo si evita lo scenario in cui appare un messaggio di "limite raggiunto" mentre il modello non e ancora stato risolto.
 
 **Nota deploy N8N v2**: il workflow usa URL diretti (`http://agent2-api:8002`) invece di `$env` perche N8N v2 Task Runner blocca l'accesso alle variabili d'ambiente nelle espressioni.
 
@@ -650,7 +711,8 @@ agent-consistency-analyzer/
 |   +-- workflow_complete_loop.json  # Loop interattivo (17 nodi)
 |   +-- workflow_demo_simple.json    # Demo singola esecuzione
 |
-+-- docker-compose.yml             # Stack completo (6 servizi)
++-- docker-compose.yml             # Core: agent2-api + n8n (2 servizi)
++-- docker-compose.kafka.yml      # Extra: zookeeper, kafka, consumer, kafka-ui (4 servizi)
 +-- Dockerfile                     # Multi-stage build, Python 3.11
 +-- requirements.txt               # 30 dipendenze
 +-- .env                           # Configurazione ambiente

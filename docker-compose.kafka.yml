@@ -1,0 +1,146 @@
+# Docker Compose Override — Kafka Pipeline (Implementazione futura)
+# Aggiunge Zookeeper, Kafka, agent2-consumer e Kafka UI per la pipeline
+# automatica Agent 1 → Agent 2 → Agent 3 via message broker.
+#
+# Utilizzo (da combinare con il compose principale):
+#   docker compose -f docker-compose.yml -f docker-compose.kafka.yml up -d --build
+#
+# Questo file estende agent2-api con la dipendenza da Kafka e aggiunge
+# i 4 servizi Kafka-related che non servono nel flusso REST interattivo.
+
+services:
+  # Zookeeper - Required by Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: agent2-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_SYNC_LIMIT: 2
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    networks:
+      - agent2-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Kafka Broker
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: agent2-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "${KAFKA_EXTERNAL_PORT:-9092}:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_NUM_PARTITIONS: 4
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - agent2-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # Override agent2-api: aggiunge dipendenza da Kafka e variabili Kafka
+  agent2-api:
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      KAFKA_INPUT_TOPIC: ${KAFKA_INPUT_TOPIC:-agent1-output}
+      KAFKA_OUTPUT_TOPIC: ${KAFKA_OUTPUT_TOPIC:-agent2-output}
+      KAFKA_GROUP_ID: ${KAFKA_GROUP_ID:-agent2-consistency-analyzer}
+      KAFKA_AUTO_OFFSET_RESET: ${KAFKA_AUTO_OFFSET_RESET:-earliest}
+
+  # Agent 2 - Kafka Consumer Mode (Parallel Processing)
+  agent2-consumer:
+    image: agent2-consistency-analyzer:latest
+    container_name: agent2-consumer
+    command: ["python", "-m", "app.kafka.consumer_advanced"]
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-mistral:7b}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-180}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      KAFKA_INPUT_TOPIC: ${KAFKA_INPUT_TOPIC:-agent1-output}
+      KAFKA_OUTPUT_TOPIC: ${KAFKA_OUTPUT_TOPIC:-agent2-output}
+      KAFKA_GROUP_ID: ${KAFKA_GROUP_ID:-agent2-consistency-analyzer}
+      KAFKA_AUTO_OFFSET_RESET: ${KAFKA_AUTO_OFFSET_RESET:-earliest}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-all-MiniLM-L6-v2}
+      ENTITY_OVERLAP_THRESHOLD: ${ENTITY_OVERLAP_THRESHOLD:-0.85}
+      SEMANTIC_SIMILARITY_THRESHOLD: ${SEMANTIC_SIMILARITY_THRESHOLD:-0.75}
+      MAX_FOLLOW_UP_QUESTIONS: ${MAX_FOLLOW_UP_QUESTIONS:-5}
+      MAX_WORKERS: ${MAX_WORKERS:-4}
+    volumes:
+      - ./knowledge_base:/app/knowledge_base:ro
+      - agent2_output:/app/output_agent
+      - agent2_logs:/app/logs
+    networks:
+      - agent2-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      agent2-api:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '2.0'
+          memory: 2G
+      replicas: ${CONSUMER_REPLICAS:-1}
+
+  # Kafka UI - Monitoring Dashboard
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: agent2-kafka-ui
+    ports:
+      - "${KAFKA_UI_PORT:-8080}:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: agent2-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      DYNAMIC_CONFIG_ENABLED: 'true'
+    depends_on:
+      - kafka
+    networks:
+      - agent2-network
+    restart: unless-stopped
+
+volumes:
+  zookeeper_data:
+    driver: local
+  zookeeper_logs:
+    driver: local
+  kafka_data:
+    driver: local

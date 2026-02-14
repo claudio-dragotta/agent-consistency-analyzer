@@ -264,7 +264,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nlet domain_model, iteration, max_iterations, session_id, previous_answers;\n\n// Check if this is the 'answers' path (loop iteration)\nif (input.domain_model_b64) {\n  // Decode base64 domain model from form\n  const decoded = Buffer.from(input.domain_model_b64, 'base64').toString('utf-8');\n  domain_model = JSON.parse(decoded);\n  iteration = parseInt(input.iteration) || 0;\n  max_iterations = parseInt(input.max_iterations) || 5;\n  session_id = input.session_id || new Date().toISOString();\n  previous_answers = input.answers || {};\n} else if (input.domain_model) {\n  // Direct A2A submission with domain_model in body\n  domain_model = typeof input.domain_model === 'string' ? JSON.parse(input.domain_model) : input.domain_model;\n  iteration = 0;\n  max_iterations = 5;\n  session_id = new Date().toISOString();\n  previous_answers = {};\n} else {\n  // File loaded via HTTP - the entire response IS the domain model\n  domain_model = input;\n  iteration = 0;\n  max_iterations = 5;\n  session_id = new Date().toISOString();\n  previous_answers = {};\n}\n\nreturn [{\n  json: {\n    domain_model: JSON.stringify(domain_model),\n    iteration,\n    max_iterations,\n    session_id,\n    previous_answers: JSON.stringify(previous_answers),\n    use_llm: true,\n    apply_auto_fixes: true\n  }\n}];"
+        "jsCode": "const input = $input.first().json;\nlet domain_model, iteration, max_iterations, session_id, previous_answers;\n\n// Check if this is the 'answers' path (loop iteration)\nif (input.domain_model_b64) {\n  // Decode base64 domain model from form\n  const decoded = Buffer.from(input.domain_model_b64, 'base64').toString('utf-8');\n  domain_model = JSON.parse(decoded);\n  iteration = parseInt(input.iteration) || 0;\n  max_iterations = parseInt(input.max_iterations) || 5;\n  session_id = input.session_id || new Date().toISOString();\n  previous_answers = input.answers || {};\n} else if (input.domain_model) {\n  // Direct A2A submission with domain_model in body\n  domain_model = typeof input.domain_model === 'string' ? JSON.parse(input.domain_model) : input.domain_model;\n  iteration = 0;\n  max_iterations = 5;\n  session_id = new Date().toISOString();\n  previous_answers = {};\n} else {\n  // File loaded via HTTP - the entire response IS the domain model\n  domain_model = input;\n  iteration = 0;\n  max_iterations = 5;\n  session_id = new Date().toISOString();\n  previous_answers = {};\n}\n\n// Soft cap: if we hit max iterations, extend automatically and continue.\nif (iteration >= max_iterations) {\n  max_iterations = iteration + 1;\n}\n\nreturn [{\n  json: {\n    domain_model: JSON.stringify(domain_model),\n    iteration,\n    max_iterations,\n    session_id,\n    previous_answers: JSON.stringify(previous_answers),\n    use_llm: true,\n    apply_auto_fixes: true\n  }\n}];"
       },
       "id": "prepare-data",
       "name": "Prepara Dati",
@@ -275,38 +275,6 @@
         560
       ],
       "notes": "Normalizza i dati per l'analisi.\nGestisce sia prima iterazione (da file) che loop (da answers con base64)."
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "check-iter",
-              "leftValue": "={{ $json.iteration }}",
-              "rightValue": "={{ $json.max_iterations }}",
-              "operator": {
-                "type": "number",
-                "operation": "gte"
-              }
-            }
-          ],
-          "combinator": "and"
-        }
-      },
-      "id": "check-max-iter",
-      "name": "Max Iterazioni?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        1360,
-        560
-      ],
-      "notes": "Se iteration >= max_iterations -> Limite raggiunto\nAltrimenti -> Analizza"
     },
     {
       "parameters": {
@@ -340,7 +308,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const apiResult = $input.first().json;\nconst prepData = $('Prepara Dati').first().json;\n\nconst questions = apiResult.follow_up_questions || [];\nconst refinedModel = apiResult.refined_model || {};\nconst domainModelStr = Object.keys(refinedModel).length > 0 ? JSON.stringify(refinedModel) : prepData.domain_model;\nconst domainModelB64 = Buffer.from(domainModelStr).toString('base64');\n\n// On first iteration, use LLM-suggested max_iterations from API; otherwise keep existing\nconst maxIter = (prepData.iteration === 0 && apiResult.suggested_max_iterations)\n  ? apiResult.suggested_max_iterations\n  : prepData.max_iterations;\n\n// Pre-render questions HTML\nlet qHtml = '';\nqHtml += '<input type=\"hidden\" name=\"session_id\" value=\"' + prepData.session_id + '\">';\nqHtml += '<input type=\"hidden\" name=\"iteration\" value=\"' + (prepData.iteration + 1) + '\">';\nqHtml += '<input type=\"hidden\" name=\"max_iterations\" value=\"' + maxIter + '\">';\nqHtml += '<input type=\"hidden\" id=\"domain_model_b64\" name=\"domain_model_b64\" value=\"' + domainModelB64 + '\">';\nqHtml += '<input type=\"hidden\" id=\"question_count\" value=\"' + questions.length + '\">';\nquestions.forEach((q, i) => {\n  const sev = q.severity || 'MEDIUM';\n  qHtml += '<div class=\"q-block\">';\n  qHtml += '<div class=\"q-num\">' + (i+1) + '</div>';\n  qHtml += '<div class=\"q-label\">' + (q.question || '') + ' <span class=\"severity sev-' + sev + '\">' + sev + '</span></div>';\n  if (q.context) qHtml += '<div class=\"context-info\">' + q.context + '</div>';\n  if (q.suggested_answers && q.suggested_answers.length > 0) {\n    qHtml += '<div class=\"options-group\" data-q=\"' + i + '\">';\n    q.suggested_answers.forEach((sa) => {\n      const saEsc = String(sa).replace(/\"/g, '&quot;');\n      qHtml += '<label class=\"option-label\"><input type=\"radio\" name=\"q' + i + '\" value=\"' + saEsc + '\"> ' + sa + '</label>';\n    });\n    qHtml += '<label class=\"option-label\"><input type=\"radio\" name=\"q' + i + '\" value=\"__custom__\"> Altro (testo libero)</label>';\n    qHtml += '</div>';\n    qHtml += '<textarea class=\"custom-area\" name=\"q' + i + '_custom\" placeholder=\"Scrivi la tua risposta personalizzata...\"></textarea>';\n  } else {\n    qHtml += '<textarea class=\"freetext\" name=\"q' + i + '\" placeholder=\"Scrivi la tua risposta...\" required></textarea>';\n  }\n  qHtml += '</div>';\n});\nif (questions.length === 0) {\n  qHtml += '<p style=\"text-align:center;color:#6b7280;padding:20px\">Nessuna domanda generata. Il modello potrebbe necessitare di una revisione manuale.</p>';\n}\n\nreturn [{\n  json: {\n    session_id: prepData.session_id,\n    iteration: prepData.iteration,\n    max_iterations: maxIter,\n    domain_model: prepData.domain_model,\n    domain_model_b64: domainModelB64,\n    status: apiResult.status,\n    follow_up_questions: JSON.stringify(questions),\n    refined_model: JSON.stringify(refinedModel),\n    summary: JSON.stringify(apiResult.summary || {}),\n    semantic_issues: JSON.stringify(apiResult.semantic_issues || []),\n    conflict_issues: JSON.stringify(apiResult.conflict_issues || []),\n    questions_html: qHtml\n  }\n}];"
+        "jsCode": "const apiResult = $input.first().json;\nconst prepData = $('Prepara Dati').first().json;\n\nconst questions = apiResult.follow_up_questions || [];\nconst refinedModel = apiResult.refined_model || {};\nconst domainModelStr = Object.keys(refinedModel).length > 0 ? JSON.stringify(refinedModel) : prepData.domain_model;\nconst domainModelB64 = Buffer.from(domainModelStr).toString('base64');\n\n// Adaptive max_iterations: refresh at every iteration based on latest LLM estimate.\nconst suggested = Number(apiResult.suggested_max_iterations || 0);\nconst remainingEstimate = suggested > 0 ? suggested : 3;\nconst adaptiveMax = (prepData.iteration + 1) + remainingEstimate;\nconst maxIter = Math.max(Number(prepData.max_iterations || 0), adaptiveMax);\n\n// Pre-render questions HTML\nlet qHtml = '';\nqHtml += '<input type=\"hidden\" name=\"session_id\" value=\"' + prepData.session_id + '\">';\nqHtml += '<input type=\"hidden\" name=\"iteration\" value=\"' + (prepData.iteration + 1) + '\">';\nqHtml += '<input type=\"hidden\" name=\"max_iterations\" value=\"' + maxIter + '\">';\nqHtml += '<input type=\"hidden\" id=\"domain_model_b64\" name=\"domain_model_b64\" value=\"' + domainModelB64 + '\">';\nqHtml += '<input type=\"hidden\" id=\"question_count\" value=\"' + questions.length + '\">';\nquestions.forEach((q, i) => {\n  const sev = q.severity || 'MEDIUM';\n  qHtml += '<div class=\"q-block\">';\n  qHtml += '<div class=\"q-num\">' + (i+1) + '</div>';\n  qHtml += '<div class=\"q-label\">' + (q.question || '') + ' <span class=\"severity sev-' + sev + '\">' + sev + '</span></div>';\n  if (q.context) qHtml += '<div class=\"context-info\">' + q.context + '</div>';\n  if (q.suggested_answers && q.suggested_answers.length > 0) {\n    qHtml += '<div class=\"options-group\" data-q=\"' + i + '\">';\n    q.suggested_answers.forEach((sa) => {\n      const saEsc = String(sa).replace(/\"/g, '&quot;');\n      qHtml += '<label class=\"option-label\"><input type=\"radio\" name=\"q' + i + '\" value=\"' + saEsc + '\"> ' + sa + '</label>';\n    });\n    qHtml += '<label class=\"option-label\"><input type=\"radio\" name=\"q' + i + '\" value=\"__custom__\"> Altro (testo libero)</label>';\n    qHtml += '</div>';\n    qHtml += '<textarea class=\"custom-area\" name=\"q' + i + '_custom\" placeholder=\"Scrivi la tua risposta personalizzata...\"></textarea>';\n  } else {\n    qHtml += '<textarea class=\"freetext\" name=\"q' + i + '\" placeholder=\"Scrivi la tua risposta...\" required></textarea>';\n  }\n  qHtml += '</div>';\n});\nif (questions.length === 0) {\n  qHtml += '<p style=\"text-align:center;color:#6b7280;padding:20px\">Nessuna domanda generata. Il modello potrebbe necessitare di una revisione manuale.</p>';\n}\n\nreturn [{\n  json: {\n    session_id: prepData.session_id,\n    iteration: prepData.iteration,\n    max_iterations: maxIter,\n    domain_model: prepData.domain_model,\n    domain_model_b64: domainModelB64,\n    status: apiResult.status,\n    follow_up_questions: JSON.stringify(questions),\n    refined_model: JSON.stringify(refinedModel),\n    summary: JSON.stringify(apiResult.summary || {}),\n    semantic_issues: JSON.stringify(apiResult.semantic_issues || []),\n    conflict_issues: JSON.stringify(apiResult.conflict_issues || []),\n    questions_html: qHtml\n  }\n}];"
       },
       "id": "merge-context",
       "name": "Combina Risultati",
@@ -408,31 +376,6 @@
         500
       ],
       "notes": "Pagina finale di successo - modello validato"
-    },
-    {
-      "parameters": {
-        "respondWith": "text",
-        "responseBody": "=<!DOCTYPE html>\n<html lang=\"it\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Limite Iterazioni</title>\n  <style>\n    *{margin:0;padding:0;box-sizing:border-box}\n    body{font-family:'Segoe UI',Tahoma,sans-serif;background:linear-gradient(135deg,#fecaca,#fee2e2);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px}\n    .container{background:#fff;max-width:640px;padding:50px 40px;border-radius:18px;text-align:center;border:3px solid #ef4444;box-shadow:0 20px 60px rgba(0,0,0,0.15)}\n    .icon{font-size:80px;margin-bottom:20px}\n    h1{color:#dc2626;font-size:28px;margin-bottom:12px}\n    p{color:#6b7280;line-height:1.7;margin-bottom:16px;font-size:15px}\n    .btn{display:inline-block;margin-top:16px;padding:12px 28px;background:#dc2626;color:#fff;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px}\n    .btn:hover{background:#b91c1c}\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"icon\">&#9888;&#65039;</div>\n    <h1>Limite Iterazioni Raggiunto</h1>\n    <p>Dopo <strong>{{ $json.max_iterations }}</strong> iterazioni il modello presenta ancora problemi che richiedono un intervento manuale piu' approfondito.</p>\n    <p>Prova a rivedere il modello di dominio originale e riesegui l'analisi.</p>\n    <a href=\"/\" class=\"btn\">Torna a n8n</a>\n  </div>\n</body>\n</html>",
-        "options": {
-          "responseHeaders": {
-            "entries": [
-              {
-                "name": "Content-Type",
-                "value": "text/html; charset=utf-8"
-              }
-            ]
-          }
-        }
-      },
-      "id": "max-iter-page",
-      "name": "Limite Iterazioni",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [
-        1580,
-        460
-      ],
-      "notes": "Mostra errore: troppe iterazioni senza raggiungere VALID"
     },
     {
       "parameters": {
@@ -582,24 +525,6 @@
     },
     "Prepara Dati": {
       "main": [
-        [
-          {
-            "node": "Max Iterazioni?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Max Iterazioni?": {
-      "main": [
-        [
-          {
-            "node": "Limite Iterazioni",
-            "type": "main",
-            "index": 0
-          }
-        ],
         [
           {
             "node": "Analizza Modello",

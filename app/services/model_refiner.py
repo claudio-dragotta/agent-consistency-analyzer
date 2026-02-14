@@ -326,21 +326,21 @@ class ModelRefiner:
         self,
         question: FollowUpQuestion,
         answer: str,
-    ) -> Dict[str, Any]:
+        max_retries: int = 2,
+    ) -> Optional[Dict[str, Any]]:
         """
         Use LLM to interpret a user answer and decide what model changes to apply.
+        Retries up to max_retries times on failure.
 
-        Returns a dict with:
-        - action: what to do (rename_event, set_owner, reclassify_domain, etc.)
-        - description: human-readable description of the change
-        - changes: specific key-value changes to apply
+        Returns a dict with action/description/changes, or None if all attempts fail
+        (caller should use rule-based fallback).
         """
         system_prompt = (
             "Sei un esperto DDD. Dato un problema di dominio, una domanda e la risposta dell'utente, "
             "determina le modifiche concrete da applicare al modello di dominio.\n\n"
             "Rispondi con un JSON con questi campi:\n"
             '- "action": una tra "rename_event", "set_owner", "reclassify_domain", '
-            '"resolve_conflict", "add_mapping", "update_pattern", "no_change"\n'
+            '"resolve_conflict", "add_mapping", "update_pattern"\n'
             '- "description": cosa fa questa modifica (in italiano, breve)\n'
             '- "changes": oggetto con le modifiche specifiche. Esempi:\n'
             '  Per rename_event: {"old_name": "...", "new_name": "..."}\n'
@@ -349,6 +349,8 @@ class ModelRefiner:
             '  Per resolve_conflict: {"resolution": "...", "priority": "req1|req2|both"}\n'
             '  Per add_mapping: {"entity": "...", "source_context": "...", "target_context": "..."}\n'
             '  Per update_pattern: {"upstream": "...", "downstream": "...", "new_pattern": "..."}\n\n'
+            "IMPORTANTE: Non usare mai 'no_change'. Scegli SEMPRE un'azione concreta.\n"
+            "Se non sai quale azione specifica applicare, usa 'resolve_conflict'.\n"
             "Rispondi SOLO con JSON valido (niente markdown)."
         )
 
@@ -362,22 +364,213 @@ class ModelRefiner:
             f"Quale modifica concreta applicare al modello?"
         )
 
-        try:
-            response = await self._call_ollama(prompt, system_prompt)
-            raw = response.strip()
-            # Strip markdown fences
-            if raw.startswith("```"):
-                raw = re.sub(r"```(?:json)?\n?", "", raw).strip()
-                raw = raw.strip("`").strip()
-            # Extract JSON object
-            start = raw.find("{")
-            end = raw.rfind("}")
-            if start >= 0 and end > start:
-                raw = raw[start : end + 1]
-            return json.loads(raw)
-        except Exception as e:
-            logger.warning(f"LLM answer interpretation failed: {e}")
-            return {"action": "no_change", "description": "Interpretazione LLM fallita", "changes": {}}
+        for attempt in range(max_retries + 1):
+            try:
+                response = await self._call_ollama(prompt, system_prompt)
+                raw = response.strip()
+                # Strip markdown fences
+                if raw.startswith("```"):
+                    raw = re.sub(r"```(?:json)?\n?", "", raw).strip()
+                    raw = raw.strip("`").strip()
+                # Extract JSON object
+                start = raw.find("{")
+                end = raw.rfind("}")
+                if start >= 0 and end > start:
+                    raw = raw[start : end + 1]
+                result = json.loads(raw)
+                action = result.get("action", "")
+                # Reject no_change: retry to get a real action
+                if action == "no_change" and attempt < max_retries:
+                    logger.info(
+                        f"LLM returned no_change (attempt {attempt + 1}/{max_retries + 1}), retrying..."
+                    )
+                    continue
+                # Accept any valid action (including no_change on last attempt)
+                if action and action != "no_change":
+                    return result
+                # Last attempt returned no_change → let fallback handle it
+                logger.warning("LLM returned no_change after all retries")
+                return None
+            except Exception as e:
+                if attempt < max_retries:
+                    logger.warning(
+                        f"LLM interpretation attempt {attempt + 1} failed: {e}, retrying..."
+                    )
+                    continue
+                logger.warning(
+                    f"LLM interpretation failed after {max_retries + 1} attempts: {e}"
+                )
+                return None
+        return None
+
+    def _interpret_answer_by_rules(
+        self,
+        question: FollowUpQuestion,
+        answer: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Rule-based fallback for interpreting user answers when LLM fails.
+
+        Returns a concrete interpretation if rules can determine the action,
+        or None if the answer is too ambiguous (caller will handle re-asking).
+        """
+        issue_type = question.related_issue_type
+        affected = question.affected_elements or []
+        answer_lower = answer.lower().strip()
+
+        # ── First: try to match against suggested_answers we generated ──
+        # When user picks a radio button, the answer IS one of our suggestions.
+        # Since we wrote them, we can parse them reliably.
+        if question.suggested_answers:
+            for sa in question.suggested_answers:
+                if answer.strip() == sa.strip():
+                    parsed = self._parse_suggested_answer(question, sa)
+                    if parsed:
+                        return parsed
+
+        # ── Second: pattern matching on answer text by issue type ──
+        if issue_type == "ENTITY_OVERLAP":
+            ctx = re.search(r"(\w+Context)", answer, re.IGNORECASE)
+            if not ctx:
+                ctx = re.search(
+                    r"(?:assegn\w*|assign\w*|ownership)\s+(?:to|a|al?)\s+(\w+)",
+                    answer, re.IGNORECASE,
+                )
+            if ctx and affected:
+                return {
+                    "action": "set_owner",
+                    "description": f"Assegnata ownership di {affected[0]} a {ctx.group(1)}",
+                    "changes": {"entity": affected[0], "owner_context": ctx.group(1)},
+                }
+
+        elif issue_type == "MISCLASSIFIED_DOMAIN":
+            target_type = None
+            if any(w in answer_lower for w in ["generic", "generico", "generica"]):
+                target_type = "generic"
+            elif any(w in answer_lower for w in ["supporting", "supporto", "supporti"]):
+                target_type = "supporting"
+            elif "core" in answer_lower:
+                target_type = "core"
+            if target_type and affected:
+                return {
+                    "action": "reclassify_domain",
+                    "description": f"Riclassificato {affected[0]} come {target_type}",
+                    "changes": {"domain": affected[0], "from": "", "to": target_type},
+                }
+
+        elif issue_type == "DUPLICATE_EVENT":
+            name_match = re.search(
+                r'(?:rinomina\w*|rename|→|->|in\s+)[\s"\']*([A-Z]\w+)', answer
+            )
+            if name_match and affected:
+                return {
+                    "action": "rename_event",
+                    "description": f"Rinominato {affected[0]} -> {name_match.group(1)}",
+                    "changes": {"old_name": affected[0], "new_name": name_match.group(1)},
+                }
+
+        elif issue_type == "INCOMPATIBLE_PATTERN":
+            patterns = {
+                "event-driven": "event-driven",
+                "shared-kernel": "shared-kernel",
+                "anti-corruption": "anti-corruption-layer",
+                "conformist": "conformist",
+                "open-host": "open-host-service",
+                "published-language": "published-language",
+            }
+            for key, pattern in patterns.items():
+                if key in answer_lower:
+                    return {
+                        "action": "update_pattern",
+                        "description": f"Pattern aggiornato a {pattern}",
+                        "changes": {
+                            "upstream": affected[0] if len(affected) > 0 else "",
+                            "downstream": affected[1] if len(affected) > 1 else "",
+                            "new_pattern": pattern,
+                        },
+                    }
+
+        # ── No match: return None (don't fake a resolution) ──
+        logger.warning(
+            f"Rules could not interpret answer for {issue_type}: '{answer[:60]}...'"
+        )
+        return None
+
+    def _parse_suggested_answer(
+        self, question: FollowUpQuestion, suggested: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Parse a suggested_answer string into an action.
+
+        Since WE generated the suggested answers, we know their common patterns
+        and can match them reliably.
+        """
+        affected = question.affected_elements or []
+        s = suggested.lower()
+
+        # Ownership patterns: "Assegna ownership a X", "Assign to X"
+        ctx_match = re.search(r"(\w+Context)", suggested, re.IGNORECASE)
+        if ctx_match and affected:
+            if any(kw in s for kw in ["owner", "assegn", "assign", "gestit"]):
+                return {
+                    "action": "set_owner",
+                    "description": f"Ownership: {affected[0]} -> {ctx_match.group(1)}",
+                    "changes": {"entity": affected[0], "owner_context": ctx_match.group(1)},
+                }
+
+        # Reference/mapping patterns: "Crea riferimento", "ProductRef"
+        if any(kw in s for kw in ["riferimento", "reference", "ref ", "mapping", "acl"]):
+            source = ""
+            target = ""
+            contexts = re.findall(r"(\w+Context)", suggested, re.IGNORECASE)
+            if len(contexts) >= 2:
+                source, target = contexts[0], contexts[1]
+            elif len(contexts) == 1:
+                target = contexts[0]
+            if affected:
+                return {
+                    "action": "add_mapping",
+                    "description": f"Mapping per {affected[0]}",
+                    "changes": {"entity": affected[0], "source_context": source, "target_context": target},
+                }
+
+        # Reclassification patterns: "Sposta in generic", "Riclassifica come supporting"
+        for domain_type in ["core", "supporting", "generic"]:
+            if domain_type in s:
+                if any(kw in s for kw in ["sposta", "riclassific", "move", "reclassif", "classificare"]):
+                    if affected:
+                        return {
+                            "action": "reclassify_domain",
+                            "description": f"Riclassificato {affected[0]} come {domain_type}",
+                            "changes": {"domain": affected[0], "from": "", "to": domain_type},
+                        }
+
+        # Rename patterns: "Rinomina in X", "→ NewName"
+        name_match = re.search(r'(?:rinomina\w*|rename|→|->)\s*["\']?([A-Z]\w+)', suggested)
+        if name_match and affected:
+            return {
+                "action": "rename_event",
+                "description": f"Rinominato {affected[0]} -> {name_match.group(1)}",
+                "changes": {"old_name": affected[0], "new_name": name_match.group(1)},
+            }
+
+        # Pattern update: mentions a specific integration pattern
+        for key, pattern in {
+            "event-driven": "event-driven", "shared-kernel": "shared-kernel",
+            "anti-corruption": "anti-corruption-layer", "conformist": "conformist",
+        }.items():
+            if key in s:
+                return {
+                    "action": "update_pattern",
+                    "description": f"Pattern aggiornato a {pattern}",
+                    "changes": {
+                        "upstream": affected[0] if len(affected) > 0 else "",
+                        "downstream": affected[1] if len(affected) > 1 else "",
+                        "new_pattern": pattern,
+                    },
+                }
+
+        return None
 
     def _apply_model_changes(
         self,
@@ -529,6 +722,22 @@ class ModelRefiner:
 
     # ─── User answer processing ──────────────────────────────────────
 
+    def _count_previous_failures(
+        self,
+        model: Dict[str, Any],
+        issue_type: str,
+        affected_elements: List[str],
+    ) -> int:
+        """Count how many times this issue was answered but NOT applied."""
+        count = 0
+        affected_set = {e.lower() for e in affected_elements}
+        for fix in model.get("_userGuidedFixes", []):
+            if not fix.get("applied", True):
+                fix_elements = {e.lower() for e in fix.get("affected_elements", [])}
+                if fix.get("type", "").startswith(issue_type) and fix_elements & affected_set:
+                    count += 1
+        return count
+
     async def _apply_user_answers(
         self,
         model: Dict[str, Any],
@@ -539,7 +748,11 @@ class ModelRefiner:
         """
         Apply user answers to refine the model iteratively.
 
-        Uses LLM to interpret each answer and apply concrete changes.
+        Interpretation chain (honest - no faking):
+        1. LLM with retry (up to 3 attempts)
+        2. Rule-based fallback (suggested_answers matching + pattern matching)
+        3. If BOTH fail → applied=false, issue stays open, will be re-asked
+           The system NEVER fakes a resolution.
         """
         refinements = []
 
@@ -556,7 +769,54 @@ class ModelRefiner:
 
             question = questions[question_index]
 
-            # Always record the user's decision
+            # --- Interpretation chain: LLM (with retry) → rules ---
+            interpretation = None
+            interpretation_source = "none"
+
+            if use_llm:
+                interpretation = await self._interpret_answer_with_llm(question, answer)
+                if interpretation:
+                    interpretation_source = "llm"
+
+            if interpretation is None:
+                interpretation = self._interpret_answer_by_rules(question, answer)
+                if interpretation:
+                    interpretation_source = "rules"
+                    logger.info(
+                        f"Rule-based fallback for {question.related_issue_type}: "
+                        f"action={interpretation.get('action')}"
+                    )
+
+            if interpretation is None:
+                # Both failed → honest failure: record but DON'T mark as resolved.
+                # The issue stays open and will be re-asked next iteration.
+                logger.warning(
+                    f"Cannot interpret answer for {question.related_issue_type}: "
+                    f"'{answer[:60]}'. Issue stays open, will be re-asked."
+                )
+
+            # --- Apply changes (or skip if interpretation is None) ---
+            applied = False
+            description = (
+                f"{question.related_issue_type}: risposta non interpretata, "
+                f"verra ri-chiesta con domanda piu specifica"
+            )
+
+            if interpretation is not None:
+                applied = self._apply_model_changes(model, question, answer, interpretation)
+                description = interpretation.get(
+                    "description",
+                    f"{question.related_issue_type} risolto: {answer[:80]}",
+                )
+
+            logger.info(
+                f"Answer for {question.related_issue_type}: "
+                f"source={interpretation_source}, "
+                f"action={interpretation.get('action', 'NONE') if interpretation else 'NONE'}, "
+                f"applied={applied}"
+            )
+
+            # --- Record with honest applied status ---
             if "_userGuidedFixes" not in model:
                 model["_userGuidedFixes"] = []
             model["_userGuidedFixes"].append({
@@ -565,24 +825,11 @@ class ModelRefiner:
                 "answer": answer,
                 "affected_elements": question.affected_elements,
                 "context": question.context,
-                "timestamp": datetime.utcnow().isoformat() + "Z"
+                "applied": applied,
+                "interpretation_source": interpretation_source,
+                "action": interpretation.get("action", "none") if interpretation else "none",
+                "timestamp": datetime.utcnow().isoformat() + "Z",
             })
-
-            # Use LLM to interpret the answer and apply model changes
-            applied = False
-            description = f"{question.related_issue_type} risolto: {answer[:80]}"
-
-            if use_llm:
-                interpretation = await self._interpret_answer_with_llm(question, answer)
-                applied = self._apply_model_changes(model, question, answer, interpretation)
-                if interpretation.get("description"):
-                    description = interpretation["description"]
-                logger.info(
-                    f"Answer for {question.related_issue_type}: "
-                    f"action={interpretation.get('action', '?')}, applied={applied}"
-                )
-            else:
-                logger.info(f"Recorded answer for {question.related_issue_type} (no LLM)")
 
             refinements.append(Refinement(
                 refinement_id=self._get_next_refinement_id(),
@@ -592,7 +839,7 @@ class ModelRefiner:
                 source_issue_type=question.related_issue_type,
                 affected_path="_userGuidedFixes",
                 original_value="unresolved",
-                new_value=answer[:100]
+                new_value=answer[:100],
             ))
 
         return refinements
