@@ -98,7 +98,7 @@ services:
       MAX_WORKERS: ${MAX_WORKERS:-4}
     volumes:
       - ./knowledge_base:/app/knowledge_base:ro
-      - agent2_output:/app/output_agent
+      - ./output_agent:/app/output_agent
       - agent2_logs:/app/logs
     networks:
       - agent2-network

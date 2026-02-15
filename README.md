@@ -18,8 +18,8 @@ Agent 2 riceve un domain model JSON, lo analizza per coerenza semantica, rileva 
 7. [Schema Domain Model](#schema-domain-model)
 8. [Struttura Progetto](#struttura-progetto)
 9. [Configurazione](#configurazione)
-10. [Integrazione Kafka](#integrazione-kafka)
-11. [Knowledge Base](#knowledge-base)
+10. [Knowledge Base](#knowledge-base)
+11. [Implementazioni Future](#implementazioni-future)
 12. [Troubleshooting](#troubleshooting)
 
 ---
@@ -61,7 +61,7 @@ Lo stack Docker e suddiviso in **due file** per separare i servizi core (usati n
 | File | Servizi | Quando usarlo |
 |------|---------|---------------|
 | `docker-compose.yml` | agent2-api, n8n | **Sempre** — flusso interattivo REST (default) |
-| `docker-compose.kafka.yml` | zookeeper, kafka, agent2-consumer, kafka-ui | **Solo** se si attiva la pipeline automatica Agent1 → Agent2 → Agent3 via Kafka |
+| `future_implementations/docker-compose.kafka.yml` | zookeeper, kafka, agent2-consumer, kafka-ui | **Solo** se si attiva la pipeline Kafka (vedi [Implementazioni Future](#implementazioni-future)) |
 
 **Comandi**:
 
@@ -69,7 +69,7 @@ Lo stack Docker e suddiviso in **due file** per separare i servizi core (usati n
 # Flusso standard (solo REST): 2 container
 docker compose up -d --build
 
-# Flusso completo con Kafka: 6 container
+# Flusso completo con Kafka (dopo aver spostato i file dalla cartella future_implementations):
 docker compose -f docker-compose.yml -f docker-compose.kafka.yml up -d --build
 ```
 
@@ -683,18 +683,14 @@ agent-consistency-analyzer/
 |   +-- main.py                    # FastAPI, 13 endpoint, orchestrazione pipeline
 |   +-- config.py                  # Settings da env (Pydantic)
 |   +-- services/
-|   |   +-- semantic_analyzer.py   # Step 1: embeddings, entity overlap
-|   |   +-- conflict_detector.py   # Step 2: regole DDD + LLM
-|   |   +-- question_generator.py  # Step 3: domande LLM-first + fallback template
-|   |   +-- model_refiner.py       # Step 4: auto-fix + LLM answer interpretation
-|   +-- kafka/
-|       +-- consumer_advanced.py   # Consumer parallelo da agent1-output
-|       +-- producer.py            # Producer verso agent2-output
+|       +-- semantic_analyzer.py   # Step 1: embeddings, entity overlap
+|       +-- conflict_detector.py   # Step 2: regole DDD + LLM
+|       +-- question_generator.py  # Step 3: domande LLM-first + fallback template
+|       +-- model_refiner.py       # Step 4: auto-fix + LLM answer interpretation
 |
 +-- a2a/
 |   +-- agent_card.json            # Metadati A2A Protocol v0.3
-|   +-- handlers/                  # Gestione messaggi A2A
-|   +-- models/                    # Strutture dati A2A
+|   +-- models/                    # Strutture dati A2A (Task, Message, Artifact)
 |
 +-- knowledge_base/
 |   +-- ddd_rules.md               # 23 regole DDD (20 KB)
@@ -711,8 +707,12 @@ agent-consistency-analyzer/
 |   +-- workflow_complete_loop.json  # Loop interattivo (17 nodi)
 |   +-- workflow_demo_simple.json    # Demo singola esecuzione
 |
++-- future_implementations/        # Moduli predisposti ma non ancora attivi
+|   +-- kafka/                     # Consumer/Producer Kafka (pipeline Agent1->Agent2->Agent3)
+|   +-- docker-compose.kafka.yml   # Compose override per stack Kafka
+|   +-- README.md                  # Istruzioni per attivare le implementazioni future
+|
 +-- docker-compose.yml             # Core: agent2-api + n8n (2 servizi)
-+-- docker-compose.kafka.yml      # Extra: zookeeper, kafka, consumer, kafka-ui (4 servizi)
 +-- Dockerfile                     # Multi-stage build, Python 3.11
 +-- requirements.txt               # 30 dipendenze
 +-- .env                           # Configurazione ambiente
@@ -757,23 +757,25 @@ uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
 
 ---
 
-## Integrazione Kafka
+## Implementazioni Future
 
-### Consumer (`consumer_advanced.py`)
+I moduli predisposti ma non ancora attivi nel flusso principale sono raccolti nella cartella `future_implementations/`. Ogni modulo include istruzioni per l'attivazione.
 
-Ascolta il topic `agent1-output` per messaggi da Agent 1. Processa automaticamente ogni domain model ricevuto e pubblica il risultato su `agent2-output`.
+### Kafka — Pipeline Asincrona (Agent1 -> Agent2 -> Agent3)
 
-- Processamento parallelo con `MAX_WORKERS=4`
-- Scalabile con `CONSUMER_REPLICAS` in docker-compose
-- Usa `use_llm=False` per velocita nella pipeline automatica
+**Stato**: predisposto, non attivo nel flusso REST corrente.
 
-### Producer (`producer.py`)
+**Contenuto** (`future_implementations/kafka/`):
+- `consumer_advanced.py` — Consumer parallelo che ascolta `agent1-output` e processa automaticamente i domain model
+- `producer.py` — Producer verso `agent2-output` per Agent 3
+- `docker-compose.kafka.yml` — Compose override che aggiunge Zookeeper, Kafka, Consumer e Kafka UI (4 servizi extra)
 
-Pubblica i risultati dell'analisi su `agent2-output`, consumato da Agent 3.
+**Come attivare**:
+1. Spostare `future_implementations/kafka/` in `app/kafka/`
+2. Spostare `future_implementations/docker-compose.kafka.yml` nella root del progetto
+3. Avviare con: `docker compose -f docker-compose.yml -f docker-compose.kafka.yml up -d --build`
 
-### Monitoraggio
-
-Kafka UI disponibile su http://localhost:8085 per ispezionare topic, messaggi e consumer groups.
+Per maggiori dettagli vedere `future_implementations/README.md`.
 
 ---
 

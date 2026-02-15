@@ -3,12 +3,19 @@ Configuration settings for Agent 2 - Consistency & Conflict Analyzer
 Loads settings from environment variables
 """
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",
+    )
 
     # Ollama Configuration
     OLLAMA_BASE_URL: str = "http://localhost:11434"
@@ -59,11 +66,6 @@ class Settings(BaseSettings):
 
     # Question generation
     MAX_FOLLOW_UP_QUESTIONS: int = 5
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
 
     def get_ollama_generate_url(self) -> str:
         """Get Ollama generate API URL."""

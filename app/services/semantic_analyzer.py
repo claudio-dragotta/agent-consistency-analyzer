@@ -9,6 +9,7 @@ import logging
 from typing import List, Dict, Any, Tuple, Optional
 from dataclasses import dataclass, field
 from enum import Enum
+import re
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -466,22 +467,26 @@ class SemanticAnalyzer:
             if not fix.get("applied", False):
                 continue
             for elem in fix.get("affected_elements", []):
-                resolved.add(elem.strip().lower())
+                key = self._normalize_element_key(elem)
+                if key:
+                    resolved.add(key)
 
         # Ownership decisions = real structural changes
         for decision in domain_model.get("_ownershipDecisions", []):
-            entity = decision.get("entity", "").strip().lower()
+            entity = self._normalize_element_key(decision.get("entity", ""))
             if entity:
                 resolved.add(entity)
 
         # Conflict resolutions = explicit user decisions
         for resolution in domain_model.get("_conflictResolutions", []):
             for elem in resolution.get("affected_elements", []):
-                resolved.add(elem.strip().lower())
+                key = self._normalize_element_key(elem)
+                if key:
+                    resolved.add(key)
 
         # Context mappings = real structural changes
         for mapping in domain_model.get("_contextMappings", []):
-            entity = mapping.get("entity", "").strip().lower()
+            entity = self._normalize_element_key(mapping.get("entity", ""))
             if entity:
                 resolved.add(entity)
 
@@ -514,7 +519,7 @@ class SemanticAnalyzer:
         if resolved:
             entity_issues = [
                 issue for issue in entity_issues
-                if not all(elem.lower() in resolved for elem in issue.affected_elements)
+                if not self._is_issue_resolved(issue.affected_elements, resolved)
             ]
         issues.extend(entity_issues)
         logger.info(f"Found {len(entity_issues)} entity overlap issues")
@@ -527,10 +532,26 @@ class SemanticAnalyzer:
         if resolved:
             term_issues = [
                 issue for issue in term_issues
-                if not all(elem.lower() in resolved for elem in issue.affected_elements)
+                if not self._is_issue_resolved(issue.affected_elements, resolved)
             ]
         issues.extend(term_issues)
         logger.info(f"Found {len(term_issues)} semantic ambiguity issues")
 
         logger.info(f"Semantic analysis complete. Total issues: {len(issues)}")
         return issues
+    def _normalize_element_key(self, value: str) -> str:
+        """Normalize affected element text for robust resolved-issue matching."""
+        if not value:
+            return ""
+        text = str(value).strip().lower()
+        text = re.sub(r"\s*\(.*\)\s*$", "", text)
+        if ":" in text:
+            text = text.split(":", 1)[0].strip()
+        text = re.sub(r"\s+", " ", text)
+        return text
+
+    def _is_issue_resolved(self, issue_elements: List[str], resolved: set) -> bool:
+        """Return True when all issue elements can be matched to resolved keys."""
+        if not issue_elements:
+            return False
+        return all(self._normalize_element_key(elem) in resolved for elem in issue_elements)

@@ -96,9 +96,15 @@ if (-not (Test-Path ".env")) {
   Write-Ok "OK File .env creato"
 }
 
-Write-Info "[2/5] Build immagini Docker..."
-if ($useComposeV2) { & docker compose build } else { & docker-compose build }
-if ($LASTEXITCODE -ne 0) { Write-Err "Errore durante il build"; exit 1 }
+# Controlla se l'immagine agent2 esiste gia'
+$imageExists = docker images -q agent2-consistency-analyzer:latest 2>$null
+if ($imageExists) {
+  Write-Ok "[2/5] Immagine Docker trovata in cache, skip build (usa --build per forzare)"
+} else {
+  Write-Info "[2/5] Prima build immagine Docker (solo la prima volta e' lento)..."
+  if ($useComposeV2) { & docker compose build } else { & docker-compose build }
+  if ($LASTEXITCODE -ne 0) { Write-Err "Errore durante il build"; exit 1 }
+}
 
 Write-Host ""
 Write-Info "[3/5] Avvio servizi core (agent2-api + n8n)..."
@@ -121,8 +127,25 @@ if ($LASTEXITCODE -ne 0) { Write-Err "Errore durante l'avvio"; exit 1 }
 
 Write-Host ""
 Write-Info "[4/5] Attesa inizializzazione servizi..."
-Write-Host "Attendo 20 secondi per il startup completo..."
-Start-Sleep -Seconds 20
+
+# Polling attivo su agent2-api /health invece di sleep fisso
+$maxWait = 120
+$sw = [Diagnostics.Stopwatch]::StartNew()
+$apiReady = $false
+while ($sw.Elapsed.TotalSeconds -lt $maxWait) {
+  try {
+    $r = Invoke-WebRequest -Uri 'http://localhost:8002/health' -UseBasicParsing -TimeoutSec 3
+    if ($r.StatusCode -eq 200) { $apiReady = $true; break }
+  } catch {}
+  Write-Host "." -NoNewline
+  Start-Sleep -Seconds 3
+}
+Write-Host ""
+if ($apiReady) {
+  Write-Ok "[OK] Agent2 API pronta in $([math]::Round($sw.Elapsed.TotalSeconds))s"
+} else {
+  Write-Warn "Agent2 API non risponde dopo ${maxWait}s, potrebbe essere ancora in avvio (download modello embeddings al primo run)"
+}
 
 Write-Host ""
 Write-Info "[5/5] Verifica health status..."
@@ -130,9 +153,8 @@ if ($useComposeV2) { & docker compose ps } else { & docker-compose ps }
 
 Write-Host ""
 Write-Info "Apertura pagine web..."
-Start-Sleep -Seconds 5
 Start-Process 'http://127.0.0.1:5678'
-Start-Sleep -Seconds 2
+Start-Sleep -Seconds 1
 Start-Process 'http://localhost:8002/docs'
 
 Write-Host ""
@@ -164,6 +186,7 @@ Write-Host "   - Usa il workflow n8n (interfaccia visuale)"
 Write-Host "   - Oppure: docker exec -it agent2-api curl http://localhost:8002/health"
 Write-Host ""
 Write-Host "3. Per attivare anche Kafka (implementazione futura):"
+Write-Host "   - Spostare i file da future_implementations/ alla root (vedi future_implementations/README.md)"
 Write-Host "   - docker compose -f docker-compose.yml -f docker-compose.kafka.yml up -d --build"
 Write-Host ""
 Read-Host "Premi INVIO per uscire"

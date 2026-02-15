@@ -36,7 +36,7 @@ services:
     volumes:
       - ./knowledge_base:/app/knowledge_base:ro
       - ./input_agent:/app/input_agent:ro
-      - agent2_output:/app/output_agent
+      - ./output_agent:/app/output_agent
       - agent2_logs:/app/logs
     networks:
       - agent2-network
@@ -95,8 +95,6 @@ networks:
         - subnet: 172.28.0.0/16
 
 volumes:
-  agent2_output:
-    driver: local
   agent2_logs:
     driver: local
   n8n_data:

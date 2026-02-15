@@ -2,11 +2,11 @@
   "$schema": "https://intelligent-domain-architect.io/schemas/domain-model/v1.json",
   "metadata": {
     "modelId": "dm-ecommerce-good-001",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "createdAt": "2025-01-15T10:00:00Z",
     "createdBy": "agent-1-domain-interviewer",
     "projectName": "E-Commerce Platform",
-    "description": "Domain model for a complete e-commerce platform supporting order management, payments, shipping, and customer management."
+    "description": "Domain model for a complete B2C e-commerce platform supporting order management, payments, shipping, inventory, and customer management."
   },
 
   "businessContext": {
@@ -45,7 +45,7 @@
         "id": "order-management",
         "name": "Order Management",
         "type": "core",
-        "description": "Handles the complete lifecycle of customer orders from creation to completion. This is the heart of the e-commerce business.",
+        "description": "Handles the complete lifecycle of customer orders from creation to completion.",
         "justification": {
           "differentiating": true,
           "economicImpact": "high",
@@ -57,8 +57,8 @@
           "name": "OrderContext",
           "ubiquitousLanguage": {
             "Order": "A customer's request to purchase one or more products, with associated delivery and payment information",
-            "OrderLine": "A single product entry within an order, including quantity and price at time of order",
-            "OrderStatus": "The current state of an order in its lifecycle (Draft, Confirmed, Paid, Shipped, Delivered, Cancelled)",
+            "OrderLine": "A single product entry within an order, including quantity and price snapshot at time of order",
+            "OrderStatus": "The current state of an order in its lifecycle (Draft, Confirmed, Paid, FulfillmentInProgress, Shipped, Delivered, Cancelled, Refunded)",
             "Cart": "A temporary collection of products a customer intends to purchase",
             "Checkout": "The process of converting a cart into a confirmed order"
           }
@@ -68,20 +68,31 @@
             "name": "Order",
             "type": "aggregate-root",
             "identity": "orderId (UUID)",
-            "lifecycle": ["Draft", "Confirmed", "Paid", "Processing", "Shipped", "Delivered", "Cancelled", "Refunded"],
+            "lifecycle": ["Draft", "Confirmed", "Paid", "FulfillmentInProgress", "Shipped", "Delivered", "Cancelled", "Refunded"],
             "attributes": [
-              {"name": "orderId", "type": "UUID", "required": true},
-              {"name": "customerId", "type": "UUID", "required": true},
-              {"name": "orderLines", "type": "List<OrderLine>", "required": true},
-              {"name": "status", "type": "OrderStatus", "required": true},
-              {"name": "totalAmount", "type": "Money", "required": true},
-              {"name": "shippingAddress", "type": "Address", "required": true},
-              {"name": "createdAt", "type": "DateTime", "required": true}
+              { "name": "orderId", "type": "UUID", "required": true },
+              { "name": "customerId", "type": "UUID", "required": true },
+              { "name": "orderLines", "type": "List<OrderLine>", "required": true },
+              { "name": "status", "type": "OrderStatus", "required": true },
+
+              { "name": "subTotal", "type": "Money", "required": true },
+              { "name": "shippingFee", "type": "Money", "required": true },
+              { "name": "taxAmount", "type": "Money", "required": true },
+              { "name": "discountAmount", "type": "Money", "required": false },
+              { "name": "totalAmount", "type": "Money", "required": true },
+
+              { "name": "shippingAddress", "type": "Address", "required": true },
+              { "name": "billingAddress", "type": "Address", "required": false },
+
+              { "name": "createdAt", "type": "DateTime", "required": true },
+              { "name": "confirmedAt", "type": "DateTime", "required": false }
             ],
             "invariants": [
-              "Order must have at least one OrderLine",
-              "TotalAmount must equal sum of OrderLine amounts plus shipping",
-              "Order cannot be modified after status is Shipped"
+              "order must have at least one orderLine",
+              "all money values must have currency = EUR for MVP",
+              "subTotal must equal sum(orderLines.lineTotal)",
+              "totalAmount must equal subTotal + shippingFee + taxAmount - discountAmount (if present)",
+              "order cannot be modified after status is Shipped"
             ]
           },
           {
@@ -89,11 +100,19 @@
             "type": "entity",
             "identity": "orderLineId (UUID)",
             "attributes": [
-              {"name": "orderLineId", "type": "UUID", "required": true},
-              {"name": "productId", "type": "UUID", "required": true},
-              {"name": "productName", "type": "String", "required": true},
-              {"name": "quantity", "type": "Integer", "required": true},
-              {"name": "unitPrice", "type": "Money", "required": true}
+              { "name": "orderLineId", "type": "UUID", "required": true },
+              { "name": "productId", "type": "UUID", "required": true },
+              { "name": "sku", "type": "String", "required": true },
+              { "name": "productName", "type": "String", "required": true },
+              { "name": "quantity", "type": "Integer", "required": true },
+              { "name": "unitPrice", "type": "Money", "required": true },
+              { "name": "vatRate", "type": "Decimal", "required": false },
+              { "name": "lineTotal", "type": "Money", "required": true }
+            ],
+            "invariants": [
+              "quantity must be >= 1",
+              "unitPrice.amount must be >= 0",
+              "lineTotal must equal unitPrice * quantity (same currency)"
             ]
           }
         ],
@@ -101,49 +120,41 @@
           {
             "name": "Money",
             "attributes": [
-              {"name": "amount", "type": "Decimal"},
-              {"name": "currency", "type": "String"}
+              { "name": "amount", "type": "Decimal" },
+              { "name": "currency", "type": "String" }
             ],
-            "invariants": ["Amount must be non-negative", "Currency must be valid ISO code"]
+            "invariants": [
+              "amount must be non-negative",
+              "currency must be a valid ISO 4217 code",
+              "for MVP, currency must be EUR"
+            ]
           },
           {
             "name": "Address",
             "attributes": [
-              {"name": "street", "type": "String"},
-              {"name": "city", "type": "String"},
-              {"name": "postalCode", "type": "String"},
-              {"name": "country", "type": "String"}
+              { "name": "street", "type": "String" },
+              { "name": "city", "type": "String" },
+              { "name": "postalCode", "type": "String" },
+              { "name": "country", "type": "String" }
+            ],
+            "invariants": [
+              "for MVP domestic shipping only: country must be the domestic country code (e.g., IT) or follow a configured allowed list"
             ]
           }
         ],
         "functionalRequirements": [
-          {
-            "id": "FR-ORD-001",
-            "description": "Customer can create an order from their cart",
-            "priority": "must-have"
-          },
-          {
-            "id": "FR-ORD-002", 
-            "description": "Customer can view their order history",
-            "priority": "must-have"
-          },
-          {
-            "id": "FR-ORD-003",
-            "description": "Customer can cancel an order before shipping",
-            "priority": "must-have"
-          },
-          {
-            "id": "FR-ORD-004",
-            "description": "System calculates order total including taxes and shipping",
-            "priority": "must-have"
-          }
+          { "id": "FR-ORD-001", "description": "Customer can create an order from their cart", "priority": "must-have" },
+          { "id": "FR-ORD-002", "description": "Customer can view their order history", "priority": "must-have" },
+          { "id": "FR-ORD-003", "description": "Customer can cancel an order before shipping", "priority": "must-have" },
+          { "id": "FR-ORD-004", "description": "System calculates order total including taxes and shipping", "priority": "must-have" }
         ]
       },
+
       {
         "id": "product-catalog",
         "name": "Product Catalog",
         "type": "core",
-        "description": "Manages the product information, categories, pricing, and availability. Central to the customer shopping experience.",
+        "description": "Manages product information, categories, pricing, and availability.",
         "justification": {
           "differentiating": true,
           "economicImpact": "high",
@@ -168,17 +179,18 @@
             "identity": "productId (UUID)",
             "lifecycle": ["Draft", "Active", "Discontinued"],
             "attributes": [
-              {"name": "productId", "type": "UUID", "required": true},
-              {"name": "sku", "type": "String", "required": true},
-              {"name": "name", "type": "String", "required": true},
-              {"name": "description", "type": "String", "required": true},
-              {"name": "price", "type": "Money", "required": true},
-              {"name": "categoryId", "type": "UUID", "required": true},
-              {"name": "isAvailable", "type": "Boolean", "required": true}
+              { "name": "productId", "type": "UUID", "required": true },
+              { "name": "sku", "type": "String", "required": true },
+              { "name": "name", "type": "String", "required": true },
+              { "name": "description", "type": "String", "required": true },
+              { "name": "price", "type": "Money", "required": true },
+              { "name": "categoryId", "type": "UUID", "required": true },
+              { "name": "isAvailable", "type": "Boolean", "required": true }
             ],
             "invariants": [
-              "SKU must be unique across all products",
-              "Price must be positive"
+              "sku must be unique across all products",
+              "price.amount must be > 0",
+              "for MVP, price.currency must be EUR"
             ]
           },
           {
@@ -186,28 +198,16 @@
             "type": "aggregate-root",
             "identity": "categoryId (UUID)",
             "attributes": [
-              {"name": "categoryId", "type": "UUID", "required": true},
-              {"name": "name", "type": "String", "required": true},
-              {"name": "parentCategoryId", "type": "UUID", "required": false}
+              { "name": "categoryId", "type": "UUID", "required": true },
+              { "name": "name", "type": "String", "required": true },
+              { "name": "parentCategoryId", "type": "UUID", "required": false }
             ]
           }
         ],
         "functionalRequirements": [
-          {
-            "id": "FR-CAT-001",
-            "description": "Customer can browse products by category",
-            "priority": "must-have"
-          },
-          {
-            "id": "FR-CAT-002",
-            "description": "Customer can search products by name or description",
-            "priority": "must-have"
-          },
-          {
-            "id": "FR-CAT-003",
-            "description": "Admin can add, update, and remove products",
-            "priority": "must-have"
-          }
+          { "id": "FR-CAT-001", "description": "Customer can browse products by category", "priority": "must-have" },
+          { "id": "FR-CAT-002", "description": "Customer can search products by name or description", "priority": "must-have" },
+          { "id": "FR-CAT-003", "description": "Admin can add, update, and remove products", "priority": "must-have" }
         ]
       }
     ],
@@ -217,7 +217,7 @@
         "id": "payment-processing",
         "name": "Payment Processing",
         "type": "supporting",
-        "description": "Handles payment transactions, refunds, and payment method management. Supports the Order Management core domain.",
+        "description": "Handles payment transactions and refunds. Supports Order Management.",
         "supportsCoreDomains": ["order-management"],
         "boundedContext": {
           "name": "PaymentContext",
@@ -235,27 +235,23 @@
             "identity": "paymentId (UUID)",
             "lifecycle": ["Pending", "Authorized", "Captured", "Failed", "Refunded"],
             "attributes": [
-              {"name": "paymentId", "type": "UUID", "required": true},
-              {"name": "orderId", "type": "UUID", "required": true},
-              {"name": "amount", "type": "Money", "required": true},
-              {"name": "status", "type": "PaymentStatus", "required": true},
-              {"name": "paymentMethodId", "type": "UUID", "required": true}
+              { "name": "paymentId", "type": "UUID", "required": true },
+              { "name": "orderId", "type": "UUID", "required": true },
+              { "name": "amount", "type": "Money", "required": true },
+              { "name": "status", "type": "PaymentStatus", "required": true },
+              { "name": "paymentMethodId", "type": "UUID", "required": true }
+            ],
+            "invariants": [
+              "for MVP, amount.currency must be EUR"
             ]
           }
         ],
         "functionalRequirements": [
-          {
-            "id": "FR-PAY-001",
-            "description": "System processes payment when order is confirmed",
-            "priority": "must-have"
-          },
-          {
-            "id": "FR-PAY-002",
-            "description": "System supports refunds for cancelled orders",
-            "priority": "must-have"
-          }
+          { "id": "FR-PAY-001", "description": "System processes payment when order is confirmed", "priority": "must-have" },
+          { "id": "FR-PAY-002", "description": "System supports refunds for cancelled orders", "priority": "must-have" }
         ]
       },
+
       {
         "id": "shipping",
         "name": "Shipping & Delivery",
@@ -266,9 +262,9 @@
           "name": "ShippingContext",
           "ubiquitousLanguage": {
             "Shipment": "A physical package containing ordered items sent to a customer",
-            "Carrier": "A logistics company that delivers shipments",
+            "Carrier": "A logistics provider used to deliver shipments",
             "TrackingNumber": "A unique identifier for tracking a shipment's progress",
-            "DeliveryStatus": "The current state of a shipment (Preparing, Shipped, InTransit, Delivered)"
+            "DeliveryStatus": "The current state of a shipment (Preparing, Dispatched, InTransit, Delivered, Returned)"
           }
         },
         "entities": [
@@ -276,30 +272,23 @@
             "name": "Shipment",
             "type": "aggregate-root",
             "identity": "shipmentId (UUID)",
-            "lifecycle": ["Preparing", "Shipped", "InTransit", "Delivered", "Returned"],
+            "lifecycle": ["Preparing", "Dispatched", "InTransit", "Delivered", "Returned"],
             "attributes": [
-              {"name": "shipmentId", "type": "UUID", "required": true},
-              {"name": "orderId", "type": "UUID", "required": true},
-              {"name": "trackingNumber", "type": "String", "required": false},
-              {"name": "carrierId", "type": "String", "required": true},
-              {"name": "status", "type": "DeliveryStatus", "required": true},
-              {"name": "shippingAddress", "type": "Address", "required": true}
+              { "name": "shipmentId", "type": "UUID", "required": true },
+              { "name": "orderId", "type": "UUID", "required": true },
+              { "name": "trackingNumber", "type": "String", "required": false },
+              { "name": "carrierCode", "type": "String", "required": true },
+              { "name": "status", "type": "DeliveryStatus", "required": true },
+              { "name": "shippingAddress", "type": "Address", "required": true }
             ]
           }
         ],
         "functionalRequirements": [
-          {
-            "id": "FR-SHP-001",
-            "description": "System creates shipment when order is paid",
-            "priority": "must-have"
-          },
-          {
-            "id": "FR-SHP-002",
-            "description": "Customer can track their shipment status",
-            "priority": "must-have"
-          }
+          { "id": "FR-SHP-001", "description": "System creates shipment when order is paid", "priority": "must-have" },
+          { "id": "FR-SHP-002", "description": "Customer can track their shipment status", "priority": "must-have" }
         ]
       },
+
       {
         "id": "customer-management",
         "name": "Customer Management",
@@ -321,29 +310,33 @@
             "identity": "customerId (UUID)",
             "lifecycle": ["Active", "Suspended", "Deleted"],
             "attributes": [
-              {"name": "customerId", "type": "UUID", "required": true},
-              {"name": "email", "type": "Email", "required": true},
-              {"name": "name", "type": "String", "required": true},
-              {"name": "savedAddresses", "type": "List<Address>", "required": false}
+              { "name": "customerId", "type": "UUID", "required": true },
+              { "name": "email", "type": "Email", "required": true },
+              { "name": "name", "type": "String", "required": true },
+              { "name": "savedAddresses", "type": "List<Address>", "required": false }
             ],
             "invariants": [
-              "Email must be unique across all customers"
+              "email must be unique across all customers"
+            ]
+          }
+        ],
+        "valueObjects": [
+          {
+            "name": "Email",
+            "attributes": [
+              { "name": "value", "type": "String" }
+            ],
+            "invariants": [
+              "value must be a valid email format"
             ]
           }
         ],
         "functionalRequirements": [
-          {
-            "id": "FR-CUS-001",
-            "description": "Customer can register and manage their profile",
-            "priority": "must-have"
-          },
-          {
-            "id": "FR-CUS-002",
-            "description": "Customer can save multiple delivery addresses",
-            "priority": "should-have"
-          }
+          { "id": "FR-CUS-001", "description": "Customer can register and manage their profile", "priority": "must-have" },
+          { "id": "FR-CUS-002", "description": "Customer can save multiple delivery addresses", "priority": "should-have" }
         ]
       },
+
       {
         "id": "inventory",
         "name": "Inventory Management",
@@ -353,8 +346,8 @@
         "boundedContext": {
           "name": "InventoryContext",
           "ubiquitousLanguage": {
-            "StockItem": "A record of available quantity for a specific product",
-            "StockLevel": "The current quantity of a product in inventory",
+            "StockItem": "A record of on-hand quantity for a specific product",
+            "OnHandQuantity": "The total physical quantity available in the warehouse",
             "Reservation": "A temporary hold on stock for a pending order",
             "Restock": "Addition of new inventory for a product"
           }
@@ -365,28 +358,21 @@
             "type": "aggregate-root",
             "identity": "stockItemId (UUID)",
             "attributes": [
-              {"name": "stockItemId", "type": "UUID", "required": true},
-              {"name": "productId", "type": "UUID", "required": true},
-              {"name": "availableQuantity", "type": "Integer", "required": true},
-              {"name": "reservedQuantity", "type": "Integer", "required": true}
+              { "name": "stockItemId", "type": "UUID", "required": true },
+              { "name": "productId", "type": "UUID", "required": true },
+              { "name": "onHandQuantity", "type": "Integer", "required": true },
+              { "name": "reservedQuantity", "type": "Integer", "required": true }
             ],
             "invariants": [
-              "Available quantity cannot be negative",
-              "Reserved quantity cannot exceed total quantity"
+              "onHandQuantity must be >= 0",
+              "reservedQuantity must be >= 0",
+              "reservedQuantity must be <= onHandQuantity"
             ]
           }
         ],
         "functionalRequirements": [
-          {
-            "id": "FR-INV-001",
-            "description": "System reserves stock when order is created",
-            "priority": "must-have"
-          },
-          {
-            "id": "FR-INV-002",
-            "description": "System releases reserved stock when order is cancelled",
-            "priority": "must-have"
-          }
+          { "id": "FR-INV-001", "description": "System reserves stock when order is created", "priority": "must-have" },
+          { "id": "FR-INV-002", "description": "System releases reserved stock when order is cancelled", "priority": "must-have" }
         ]
       }
     ],
@@ -396,38 +382,22 @@
         "id": "notification",
         "name": "Notification Service",
         "type": "generic",
-        "description": "Handles sending emails, SMS, and push notifications. Standard capability with no business differentiation.",
+        "description": "Handles sending emails, SMS, and push notifications.",
         "implementationStrategy": "Use third-party service (SendGrid, Twilio)",
         "functionalRequirements": [
-          {
-            "id": "FR-NOT-001",
-            "description": "System sends order confirmation email",
-            "priority": "must-have"
-          },
-          {
-            "id": "FR-NOT-002",
-            "description": "System sends shipping notification with tracking",
-            "priority": "must-have"
-          }
+          { "id": "FR-NOT-001", "description": "System sends order confirmation email", "priority": "must-have" },
+          { "id": "FR-NOT-002", "description": "System sends shipping notification with tracking", "priority": "must-have" }
         ]
       },
       {
         "id": "authentication",
         "name": "Authentication & Authorization",
         "type": "generic",
-        "description": "Handles user authentication, session management, and access control. Standard security capability.",
+        "description": "Handles user authentication, session management, and access control.",
         "implementationStrategy": "Use identity provider (Auth0, Keycloak)",
         "functionalRequirements": [
-          {
-            "id": "FR-AUTH-001",
-            "description": "User can login with email and password",
-            "priority": "must-have"
-          },
-          {
-            "id": "FR-AUTH-002",
-            "description": "System supports password reset flow",
-            "priority": "must-have"
-          }
+          { "id": "FR-AUTH-001", "description": "User can login with email and password", "priority": "must-have" },
+          { "id": "FR-AUTH-002", "description": "System supports password reset flow", "priority": "must-have" }
         ]
       }
     ]
@@ -439,6 +409,13 @@
         "name": "OrderCreated",
         "emitter": "order-management",
         "description": "Emitted when a new order is successfully created",
+        "meta": {
+          "eventId": "UUID",
+          "occurredAt": "DateTime",
+          "schemaVersion": "1",
+          "correlationId": "String",
+          "causationId": "String"
+        },
         "payload": {
           "orderId": "UUID",
           "customerId": "UUID",
@@ -447,20 +424,36 @@
         },
         "consumers": ["inventory", "notification"]
       },
+
       {
         "name": "OrderConfirmed",
         "emitter": "order-management",
         "description": "Emitted when customer confirms their order",
+        "meta": {
+          "eventId": "UUID",
+          "occurredAt": "DateTime",
+          "schemaVersion": "1",
+          "correlationId": "String",
+          "causationId": "String"
+        },
         "payload": {
           "orderId": "UUID",
           "confirmedAt": "DateTime"
         },
         "consumers": ["payment-processing"]
       },
+
       {
         "name": "OrderCancelled",
         "emitter": "order-management",
         "description": "Emitted when an order is cancelled",
+        "meta": {
+          "eventId": "UUID",
+          "occurredAt": "DateTime",
+          "schemaVersion": "1",
+          "correlationId": "String",
+          "causationId": "String"
+        },
         "payload": {
           "orderId": "UUID",
           "reason": "String",
@@ -468,10 +461,18 @@
         },
         "consumers": ["payment-processing", "inventory", "shipping", "notification"]
       },
+
       {
         "name": "PaymentAuthorized",
         "emitter": "payment-processing",
         "description": "Emitted when payment is successfully authorized",
+        "meta": {
+          "eventId": "UUID",
+          "occurredAt": "DateTime",
+          "schemaVersion": "1",
+          "correlationId": "String",
+          "causationId": "String"
+        },
         "payload": {
           "paymentId": "UUID",
           "orderId": "UUID",
@@ -480,21 +481,56 @@
         },
         "consumers": ["order-management"]
       },
+
       {
         "name": "PaymentCaptured",
         "emitter": "payment-processing",
         "description": "Emitted when payment is captured",
+        "meta": {
+          "eventId": "UUID",
+          "occurredAt": "DateTime",
+          "schemaVersion": "1",
+          "correlationId": "String",
+          "causationId": "String"
+        },
         "payload": {
           "paymentId": "UUID",
           "orderId": "UUID",
           "capturedAt": "DateTime"
         },
-        "consumers": ["order-management", "shipping"]
+        "consumers": ["order-management"]
       },
+
+      {
+        "name": "OrderPaid",
+        "emitter": "order-management",
+        "description": "Emitted after Order Management updates order status to Paid (after consuming PaymentCaptured)",
+        "meta": {
+          "eventId": "UUID",
+          "occurredAt": "DateTime",
+          "schemaVersion": "1",
+          "correlationId": "String",
+          "causationId": "String"
+        },
+        "payload": {
+          "orderId": "UUID",
+          "paidAt": "DateTime",
+          "totalAmount": "Money"
+        },
+        "consumers": ["shipping", "notification"]
+      },
+
       {
         "name": "PaymentFailed",
         "emitter": "payment-processing",
         "description": "Emitted when payment processing fails",
+        "meta": {
+          "eventId": "UUID",
+          "occurredAt": "DateTime",
+          "schemaVersion": "1",
+          "correlationId": "String",
+          "causationId": "String"
+        },
         "payload": {
           "paymentId": "UUID",
           "orderId": "UUID",
@@ -502,21 +538,37 @@
         },
         "consumers": ["order-management", "notification"]
       },
+
       {
         "name": "ShipmentCreated",
         "emitter": "shipping",
         "description": "Emitted when a shipment is created for an order",
+        "meta": {
+          "eventId": "UUID",
+          "occurredAt": "DateTime",
+          "schemaVersion": "1",
+          "correlationId": "String",
+          "causationId": "String"
+        },
         "payload": {
           "shipmentId": "UUID",
           "orderId": "UUID",
-          "carrierId": "String"
+          "carrierCode": "String"
         },
         "consumers": ["order-management"]
       },
+
       {
         "name": "ShipmentDispatched",
         "emitter": "shipping",
         "description": "Emitted when shipment is handed to carrier",
+        "meta": {
+          "eventId": "UUID",
+          "occurredAt": "DateTime",
+          "schemaVersion": "1",
+          "correlationId": "String",
+          "causationId": "String"
+        },
         "payload": {
           "shipmentId": "UUID",
           "orderId": "UUID",
@@ -525,10 +577,18 @@
         },
         "consumers": ["order-management", "notification"]
       },
+
       {
         "name": "ShipmentDelivered",
         "emitter": "shipping",
         "description": "Emitted when shipment is delivered",
+        "meta": {
+          "eventId": "UUID",
+          "occurredAt": "DateTime",
+          "schemaVersion": "1",
+          "correlationId": "String",
+          "causationId": "String"
+        },
         "payload": {
           "shipmentId": "UUID",
           "orderId": "UUID",
@@ -536,10 +596,18 @@
         },
         "consumers": ["order-management", "notification"]
       },
+
       {
         "name": "StockReserved",
         "emitter": "inventory",
         "description": "Emitted when stock is reserved for an order",
+        "meta": {
+          "eventId": "UUID",
+          "occurredAt": "DateTime",
+          "schemaVersion": "1",
+          "correlationId": "String",
+          "causationId": "String"
+        },
         "payload": {
           "reservationId": "UUID",
           "orderId": "UUID",
@@ -547,20 +615,36 @@
         },
         "consumers": ["order-management"]
       },
+
       {
         "name": "StockReservationFailed",
         "emitter": "inventory",
         "description": "Emitted when stock reservation fails due to insufficient inventory",
+        "meta": {
+          "eventId": "UUID",
+          "occurredAt": "DateTime",
+          "schemaVersion": "1",
+          "correlationId": "String",
+          "causationId": "String"
+        },
         "payload": {
           "orderId": "UUID",
           "failedItems": "List<FailedItemDTO>"
         },
         "consumers": ["order-management", "notification"]
       },
+
       {
         "name": "ProductAvailabilityChanged",
         "emitter": "product-catalog",
         "description": "Emitted when a product's availability status changes",
+        "meta": {
+          "eventId": "UUID",
+          "occurredAt": "DateTime",
+          "schemaVersion": "1",
+          "correlationId": "String",
+          "causationId": "String"
+        },
         "payload": {
           "productId": "UUID",
           "isAvailable": "Boolean",
@@ -568,10 +652,18 @@
         },
         "consumers": ["inventory"]
       },
+
       {
         "name": "CustomerRegistered",
         "emitter": "customer-management",
         "description": "Emitted when a new customer registers",
+        "meta": {
+          "eventId": "UUID",
+          "occurredAt": "DateTime",
+          "schemaVersion": "1",
+          "correlationId": "String",
+          "causationId": "String"
+        },
         "payload": {
           "customerId": "UUID",
           "email": "String",
@@ -607,28 +699,28 @@
       "downstream": "shipping",
       "relationship": "customer-supplier",
       "integrationPattern": "event-driven",
-      "description": "Order Management publishes paid order events, Shipping creates shipments"
+      "description": "Order Management emits OrderPaid, Shipping creates shipments"
     },
     {
       "upstream": "order-management",
       "downstream": "inventory",
       "relationship": "customer-supplier",
       "integrationPattern": "event-driven",
-      "description": "Order Management publishes order events, Inventory manages stock reservations"
+      "description": "Order Management publishes OrderCreated/Cancelled, Inventory manages stock reservations"
     },
     {
       "upstream": "product-catalog",
       "downstream": "order-management",
       "relationship": "conformist",
       "integrationPattern": "sync-query",
-      "description": "Order Management queries Product Catalog for product details during order creation"
+      "description": "Order Management queries Product Catalog for product details during checkout (consider ACL if model stability is required)"
     },
     {
       "upstream": "customer-management",
       "downstream": "order-management",
       "relationship": "conformist",
       "integrationPattern": "sync-query",
-      "description": "Order Management queries Customer Management for customer details"
+      "description": "Order Management queries Customer Management for customer identity and addresses (consider ACL if model stability is required)"
     }
   ]
 }

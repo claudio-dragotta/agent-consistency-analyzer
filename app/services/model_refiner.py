@@ -116,6 +116,19 @@ class ModelRefiner:
         """Create a deep copy of the domain model."""
         return copy.deepcopy(model)
 
+    def _extract_base_event_name(self, raw: str) -> str:
+        """
+        Normalize event identifiers from issue text.
+
+        Example: "OrderCreated (emitted by order-management)" -> "OrderCreated"
+        """
+        if not raw:
+            return ""
+        name = str(raw).strip()
+        # Drop parenthesized suffixes often used in issue descriptions.
+        name = re.sub(r"\s*\(.*\)\s*$", "", name).strip()
+        return name
+
     # ─── Model element finders ───────────────────────────────────────
 
     def _find_entity_in_model(
@@ -139,10 +152,19 @@ class ModelRefiner:
         self, model: Dict[str, Any], event_name: str
     ) -> Tuple[Optional[Dict], str, int]:
         """Find an event in the model by name."""
-        events = model.get("eventDrivenModel", {}).get("domainEvents", [])
+        event_model = model.get("eventDrivenModel", {})
+        # Support both legacy "domainEvents" and common "events" keys.
+        if event_model.get("domainEvents"):
+            events_key = "domainEvents"
+            events = event_model.get("domainEvents", [])
+        else:
+            events_key = "events"
+            events = event_model.get("events", [])
+
+        target = self._extract_base_event_name(event_name).lower()
         for i, event in enumerate(events):
-            if event.get("name", "").lower() == event_name.lower():
-                return event, f"eventDrivenModel.domainEvents[{i}]", i
+            if self._extract_base_event_name(event.get("name", "")).lower() == target:
+                return event, f"eventDrivenModel.{events_key}[{i}]", i
         return None, "", -1
 
     def _find_domain_in_model(
@@ -421,9 +443,14 @@ class ModelRefiner:
         # ── First: try to match against suggested_answers we generated ──
         # When user picks a radio button, the answer IS one of our suggestions.
         # Since we wrote them, we can parse them reliably.
+        # Use fuzzy matching: case-insensitive, substring, and stripped comparison.
         if question.suggested_answers:
+            answer_norm = answer.strip().lower()
             for sa in question.suggested_answers:
-                if answer.strip() == sa.strip():
+                sa_norm = sa.strip().lower()
+                if (answer_norm == sa_norm
+                        or answer_norm in sa_norm
+                        or sa_norm in answer_norm):
                     parsed = self._parse_suggested_answer(question, sa)
                     if parsed:
                         return parsed
@@ -463,10 +490,11 @@ class ModelRefiner:
                 r'(?:rinomina\w*|rename|→|->|in\s+)[\s"\']*([A-Z]\w+)', answer
             )
             if name_match and affected:
+                old_name = self._extract_base_event_name(affected[0])
                 return {
                     "action": "rename_event",
-                    "description": f"Rinominato {affected[0]} -> {name_match.group(1)}",
-                    "changes": {"old_name": affected[0], "new_name": name_match.group(1)},
+                    "description": f"Rinominato {old_name} -> {name_match.group(1)}",
+                    "changes": {"old_name": old_name, "new_name": name_match.group(1)},
                 }
 
         elif issue_type == "INCOMPATIBLE_PATTERN":
@@ -548,10 +576,11 @@ class ModelRefiner:
         # Rename patterns: "Rinomina in X", "→ NewName"
         name_match = re.search(r'(?:rinomina\w*|rename|→|->)\s*["\']?([A-Z]\w+)', suggested)
         if name_match and affected:
+            old_name = self._extract_base_event_name(affected[0])
             return {
                 "action": "rename_event",
-                "description": f"Rinominato {affected[0]} -> {name_match.group(1)}",
-                "changes": {"old_name": affected[0], "new_name": name_match.group(1)},
+                "description": f"Rinominato {old_name} -> {name_match.group(1)}",
+                "changes": {"old_name": old_name, "new_name": name_match.group(1)},
             }
 
         # Pattern update: mentions a specific integration pattern
@@ -588,7 +617,7 @@ class ModelRefiner:
         changes = interpretation.get("changes", {})
 
         if action == "rename_event":
-            old_name = changes.get("old_name", "")
+            old_name = self._extract_base_event_name(changes.get("old_name", ""))
             new_name = changes.get("new_name", "")
             if old_name and new_name:
                 event, path, idx = self._find_event_in_model(model, old_name)
@@ -757,17 +786,31 @@ class ModelRefiner:
         refinements = []
 
         for question_id, answer in answers.items():
-            try:
-                question_index = int(question_id.replace("q", ""))
-            except (ValueError, IndexError):
-                logger.warning(f"Invalid question ID format: {question_id}")
-                continue
+            logger.info(
+                f"Processing answer: key='{question_id}', "
+                f"answer='{answer[:80]}', "
+                f"available_questions={len(questions)}"
+            )
+            question: Optional[FollowUpQuestion] = None
 
-            if question_index >= len(questions):
-                logger.warning(f"Question index {question_index} out of range")
-                continue
-
-            question = questions[question_index]
+            # Accept index-based keys (q0, q1, 0, 1) for current n8n form flow.
+            m = re.fullmatch(r"q?(\d+)", str(question_id).strip(), flags=re.IGNORECASE)
+            if m:
+                question_index = int(m.group(1))
+                if question_index < len(questions):
+                    question = questions[question_index]
+                else:
+                    logger.warning(f"Question index {question_index} out of range")
+                    continue
+            else:
+                # Accept explicit question IDs (e.g., FUQ-001) for API/A2A clients.
+                question = next(
+                    (q for q in questions if str(q.question_id).strip().lower() == str(question_id).strip().lower()),
+                    None,
+                )
+                if question is None:
+                    logger.warning(f"Invalid question ID format or unknown ID: {question_id}")
+                    continue
 
             # --- Interpretation chain: LLM (with retry) → rules ---
             interpretation = None
@@ -788,12 +831,35 @@ class ModelRefiner:
                     )
 
             if interpretation is None:
-                # Both failed → honest failure: record but DON'T mark as resolved.
-                # The issue stays open and will be re-asked next iteration.
-                logger.warning(
-                    f"Cannot interpret answer for {question.related_issue_type}: "
-                    f"'{answer[:60]}'. Issue stays open, will be re-asked."
+                # Both LLM and rules failed to produce a specific action.
+                # Check how many times this issue has already been asked without
+                # being applied — if it has been asked before, use a catch-all
+                # resolve_conflict to avoid an infinite re-ask loop.
+                prev_failures = self._count_previous_failures(
+                    model, question.related_issue_type, question.affected_elements
                 )
+                if prev_failures > 0 or len(answer.strip()) > 0:
+                    # User has answered (possibly again) — accept as generic resolution
+                    interpretation = {
+                        "action": "resolve_conflict",
+                        "description": (
+                            f"{question.related_issue_type}: risolto con decisione utente"
+                        ),
+                        "changes": {
+                            "resolution": answer,
+                            "priority": "user-decision",
+                        },
+                    }
+                    interpretation_source = "catch-all"
+                    logger.info(
+                        f"Catch-all resolution for {question.related_issue_type} "
+                        f"(prev_failures={prev_failures}): '{answer[:60]}'"
+                    )
+                else:
+                    logger.warning(
+                        f"Cannot interpret empty answer for {question.related_issue_type}. "
+                        f"Issue stays open."
+                    )
 
             # --- Apply changes (or skip if interpretation is None) ---
             applied = False

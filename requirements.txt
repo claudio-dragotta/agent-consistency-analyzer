@@ -14,7 +14,8 @@ requests==2.31.0
 
 # NLP and Embeddings
 sentence-transformers==2.3.1
-torch==2.1.2
+# Torch 2.2+ is required for Python 3.12 wheels on Windows
+torch==2.2.2
 transformers==4.36.2
 
 # Text Processing
