@@ -13,8 +13,9 @@ Write-Host "  Consistency & Conflict Analyzer"
 Write-Host "========================================"
 Write-Host ""
 Write-Host "Questa demo avviera' automaticamente:"
-Write-Host " 1. Docker con i servizi core (agent2-api + n8n)"
-Write-Host " 2. n8n (workflow visuale)"
+Write-Host " 1. Ollama (LLM locale per analisi)"
+Write-Host " 2. Docker con i servizi core (agent2-api + n8n)"
+Write-Host " 3. n8n (workflow visuale)"
 Write-Host ""
 Write-Host "E aprira' automaticamente le pagine web"
 Write-Host ""
@@ -80,6 +81,84 @@ function Ensure-DockerReady {
 
 Ensure-DockerReady
 
+# ── Ensure Ollama is running on the host ──────────────────────────────────
+function Ensure-OllamaReady {
+  Write-Info "[CHECK] Verifica Ollama..."
+
+  $ollamaCmd = Get-Command ollama -ErrorAction SilentlyContinue
+  if (-not $ollamaCmd) {
+    # Cerca nei percorsi comuni di Windows
+    $candidates = @(
+      "$env:LocalAppData\Programs\Ollama\ollama.exe",
+      "$env:ProgramFiles\Ollama\ollama.exe",
+      "C:\Users\$env:USERNAME\AppData\Local\Programs\Ollama\ollama.exe"
+    )
+    foreach ($p in $candidates) {
+      if (Test-Path $p) { $ollamaCmd = $p; break }
+    }
+  }
+
+  if (-not $ollamaCmd) {
+    Write-Err "Ollama non trovato. Scaricalo da https://ollama.com/download"
+    Write-Err "Senza Ollama il sistema non puo' interpretare le risposte e il loop non si risolve."
+    exit 1
+  }
+
+  # Verifica se Ollama e' raggiungibile
+  $ollamaReady = $false
+  try {
+    $r = Invoke-WebRequest -Uri 'http://localhost:11434/api/tags' -UseBasicParsing -TimeoutSec 3
+    if ($r.StatusCode -eq 200) { $ollamaReady = $true }
+  } catch {}
+
+  if (-not $ollamaReady) {
+    Write-Warn "Ollama non e' in esecuzione. Provo ad avviarlo..."
+    Start-Process -FilePath 'ollama' -ArgumentList 'serve' -WindowStyle Hidden
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    while ($sw.Elapsed.TotalSeconds -lt 30) {
+      Start-Sleep -Seconds 2
+      try {
+        $r = Invoke-WebRequest -Uri 'http://localhost:11434/api/tags' -UseBasicParsing -TimeoutSec 3
+        if ($r.StatusCode -eq 200) { $ollamaReady = $true; break }
+      } catch {}
+      Write-Host "." -NoNewline
+    }
+    Write-Host ""
+    if (-not $ollamaReady) {
+      Write-Err "Ollama non si e' avviato dopo 30 secondi. Avvialo manualmente con: ollama serve"
+      exit 1
+    }
+  }
+  Write-Ok "[OK] Ollama attivo su localhost:11434"
+
+  # Leggi il modello configurato da .env (o usa il default del docker-compose)
+  $model = "mistral:7b"
+  if (Test-Path ".env") {
+    $envLine = Get-Content ".env" | Where-Object { $_ -match "^OLLAMA_MODEL=" }
+    if ($envLine) { $model = ($envLine -split "=", 2)[1].Trim() }
+  }
+
+  # Verifica se il modello e' scaricato
+  Write-Info "[CHECK] Verifica modello '$model'..."
+  try {
+    $tags = (Invoke-WebRequest -Uri 'http://localhost:11434/api/tags' -UseBasicParsing -TimeoutSec 5).Content | ConvertFrom-Json
+    $found = $tags.models | Where-Object { $_.name -eq $model -or $_.name -eq "$model`:latest" -or $_.name.StartsWith("$model`:") }
+    if (-not $found) {
+      Write-Warn "Modello '$model' non trovato. Lo scarico (puo' richiedere qualche minuto)..."
+      & ollama pull $model
+      if ($LASTEXITCODE -ne 0) {
+        Write-Err "Errore durante il download del modello '$model'."
+        exit 1
+      }
+    }
+  } catch {
+    Write-Warn "Non riesco a verificare i modelli Ollama, continuo comunque..."
+  }
+  Write-Ok "[OK] Modello '$model' disponibile"
+}
+
+Ensure-OllamaReady
+
 $useComposeV2 = $false
 & docker compose version *> $null
 if ($LASTEXITCODE -eq 0) { $useComposeV2 = $true }
@@ -91,23 +170,18 @@ Write-Info ("[CHECK] Comando compose: {0}" -f ($useComposeV2 ? 'docker compose' 
 
 # Crea .env se manca
 if (-not (Test-Path ".env")) {
-  Write-Info "[1/5] Creazione file .env da template..."
+  Write-Info "[1/6] Creazione file .env da template..."
   Copy-Item .env.docker .env -Force
   Write-Ok "OK File .env creato"
 }
 
-# Controlla se l'immagine agent2 esiste gia'
-$imageExists = docker images -q agent2-consistency-analyzer:latest 2>$null
-if ($imageExists) {
-  Write-Ok "[2/5] Immagine Docker trovata in cache, skip build (usa --build per forzare)"
-} else {
-  Write-Info "[2/5] Prima build immagine Docker (solo la prima volta e' lento)..."
-  if ($useComposeV2) { & docker compose build } else { & docker-compose build }
-  if ($LASTEXITCODE -ne 0) { Write-Err "Errore durante il build"; exit 1 }
-}
+# Build immagine (sempre rebuild per avere codice aggiornato; Docker cache rende veloce se nulla e' cambiato)
+Write-Info "[2/6] Build immagine Docker (la cache Docker salta i layer invariati)..."
+if ($useComposeV2) { & docker compose build } else { & docker-compose build }
+if ($LASTEXITCODE -ne 0) { Write-Err "Errore durante il build"; exit 1 }
 
 Write-Host ""
-Write-Info "[3/5] Avvio servizi core (agent2-api + n8n)..."
+Write-Info "[3/6] Avvio servizi core (agent2-api + n8n)..."
 
 # Se n8n e' gia' attivo localmente (porta 5678), riusalo e non avviare il servizio n8n dello stack
 $useExternalN8n = $false
@@ -126,7 +200,7 @@ if ($useExternalN8n) {
 if ($LASTEXITCODE -ne 0) { Write-Err "Errore durante l'avvio"; exit 1 }
 
 Write-Host ""
-Write-Info "[4/5] Attesa inizializzazione servizi..."
+Write-Info "[4/6] Attesa inizializzazione servizi..."
 
 # Polling attivo su agent2-api /health invece di sleep fisso
 $maxWait = 120
@@ -148,11 +222,11 @@ if ($apiReady) {
 }
 
 Write-Host ""
-Write-Info "[5/5] Verifica health status..."
+Write-Info "[5/6] Verifica health status..."
 if ($useComposeV2) { & docker compose ps } else { & docker-compose ps }
 
 Write-Host ""
-Write-Info "Apertura pagine web..."
+Write-Info "[6/6] Apertura pagine web..."
 Start-Process 'http://127.0.0.1:5678'
 Start-Sleep -Seconds 1
 Start-Process 'http://localhost:8002/docs'
@@ -189,4 +263,37 @@ Write-Host "3. Per attivare anche Kafka (implementazione futura):"
 Write-Host "   - Spostare i file da future_implementations/ alla root (vedi future_implementations/README.md)"
 Write-Host "   - docker compose -f docker-compose.yml -f docker-compose.kafka.yml up -d --build"
 Write-Host ""
-Read-Host "Premi INVIO per uscire"
+Read-Host "Premi INVIO per spegnere tutto e uscire"
+
+Write-Host ""
+Write-Host "========================================"
+Write-Info "Spegnimento in corso..."
+Write-Host "========================================"
+
+# 1. Ferma i container Docker
+Write-Info "[STOP] Arresto container Docker..."
+if ($useComposeV2) { & docker compose down } else { & docker-compose down }
+if ($LASTEXITCODE -eq 0) {
+  Write-Ok "[OK] Container Docker fermati"
+} else {
+  Write-Warn "Problema durante l'arresto dei container"
+}
+
+# 2. Ferma Ollama (se avviato da questo script)
+Write-Info "[STOP] Arresto Ollama..."
+$ollamaProc = Get-Process -Name 'ollama' -ErrorAction SilentlyContinue
+if ($ollamaProc) {
+  Stop-Process -Name 'ollama' -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 2
+  $still = Get-Process -Name 'ollama' -ErrorAction SilentlyContinue
+  if (-not $still) {
+    Write-Ok "[OK] Ollama fermato"
+  } else {
+    Write-Warn "Ollama potrebbe essere ancora in esecuzione"
+  }
+} else {
+  Write-Ok "[OK] Ollama non era in esecuzione"
+}
+
+Write-Host ""
+Write-Ok "Tutto spento. Arrivederci!"

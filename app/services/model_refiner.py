@@ -518,6 +518,21 @@ class ModelRefiner:
                         },
                     }
 
+        elif issue_type == "SEMANTIC_AMBIGUITY":
+            # Semantic ambiguity answers are always about term clarification.
+            # Any non-empty answer is a valid resolution since there's no
+            # structural model change — just recording the user's decision.
+            if answer_lower:
+                term = affected[0].split(":")[0].strip() if affected else "termine"
+                return {
+                    "action": "resolve_conflict",
+                    "description": f"Ambiguità semantica risolta per '{term}': {answer[:80]}",
+                    "changes": {
+                        "resolution": answer,
+                        "priority": "user-decision",
+                    },
+                }
+
         # ── No match: return None (don't fake a resolution) ──
         logger.warning(
             f"Rules could not interpret answer for {issue_type}: '{answer[:60]}...'"
@@ -598,6 +613,19 @@ class ModelRefiner:
                         "new_pattern": pattern,
                     },
                 }
+
+        # Semantic ambiguity resolution: user chose a suggested clarification
+        issue_type = question.related_issue_type if question else ""
+        if issue_type == "SEMANTIC_AMBIGUITY":
+            term = affected[0].split(":")[0].strip() if affected else "termine"
+            return {
+                "action": "resolve_conflict",
+                "description": f"Ambiguità semantica risolta per '{term}': {suggested[:80]}",
+                "changes": {
+                    "resolution": suggested,
+                    "priority": "user-decision",
+                },
+            }
 
         return None
 
