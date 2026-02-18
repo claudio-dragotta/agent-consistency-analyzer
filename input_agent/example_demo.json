@@ -253,8 +253,8 @@
       "upstream": "product-catalog",
       "downstream": "order-management",
       "relationship": "conformist",
-      "integrationPattern": "sync-query",
-      "description": "Condivisione dati prodotto tra catalogo e ordini"
+      "integrationPattern": "open-host-service",
+      "description": "Condivisione dati prodotto tra catalogo e ordini tramite Open Host Service"
     }
   ],
 

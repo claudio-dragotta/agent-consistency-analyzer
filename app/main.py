@@ -102,6 +102,9 @@ class DomainModelRequest(BaseModel):
         default_factory=dict,
         description="User answers from previous iteration for iterative model refinement"
     )
+    original_filename: Optional[str] = Field(default=None, description="Original input filename for output folder organisation")
+    session_id: Optional[str] = Field(default=None, description="Session identifier for grouping iterations")
+    iteration: Optional[int] = Field(default=0, description="Current iteration number (0-based)")
 
 
 class ValidationSummary(BaseModel):
@@ -376,11 +379,14 @@ async def analyze_domain_model(request: DomainModelRequest):
             use_llm=request.use_llm,
             apply_auto_fixes=request.apply_auto_fixes,
             previous_answers=request.previous_answers,
-            return_full_result=True
+            return_full_result=True,
+            original_filename=request.original_filename or "",
+            session_id=request.session_id or "",
+            iteration=request.iteration or 0,
         )
-        
+
         return result
-        
+
     except Exception as e:
         logger.error(f"Error analyzing domain model: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -449,6 +455,7 @@ async def analyze_by_file(request: AnalyzeByFileRequest):
             apply_auto_fixes=request.apply_auto_fixes,
             previous_answers=request.previous_answers or {},
             return_full_result=True,
+            original_filename=request.file_name,
         )
         return result
     except HTTPException:
@@ -566,7 +573,10 @@ async def _process_domain_model(
     use_llm: bool = True,
     apply_auto_fixes: bool = True,
     previous_answers: Dict[str, str] = None,
-    return_full_result: bool = False
+    return_full_result: bool = False,
+    original_filename: str = "",
+    session_id: str = "",
+    iteration: int = 0
 ) -> Optional[ValidationResponse]:
     """
     Process a domain model through the full analysis pipeline.
@@ -713,7 +723,7 @@ async def _process_domain_model(
             tasks_store[task_id] = task
         
         # Save output to file
-        await _save_output(task_id, result)
+        await _save_output(task_id, result, original_filename, session_id, iteration)
         
         if return_full_result:
             return result
@@ -736,17 +746,40 @@ async def _process_domain_model(
             raise
 
 
-async def _save_output(task_id: str, result: ValidationResponse):
-    """Save validation output to file for Agent 3."""
+async def _save_output(task_id: str, result: ValidationResponse,
+                       original_filename: str = "", session_id: str = "",
+                       iteration: int = 0):
+    """Save validation output to file for Agent 3, organised by filename/session/iteration."""
+    import re as _re
     try:
         output_dir = Path(settings.OUTPUT_DIR)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        output_file = output_dir / f"validation_{task_id}.json"
-        
+
+        # --- folder name from original_filename or domain model name ---
+        if original_filename:
+            stem = Path(original_filename).stem
+        else:
+            try:
+                m = result.refined_model or {}
+                stem = (m.get("domainMap", {}) or {}).get("name", "") or \
+                       (m.get("eventDrivenModel", {}) or {}).get("name", "") or ""
+            except Exception:
+                stem = ""
+        stem = _re.sub(r"[^\w\-]", "_", stem).strip("_")[:50] or "unknown"
+
+        # --- session subfolder ---
+        if session_id:
+            sf = _re.sub(r"[^\w\-]", "_", session_id)[:40]
+        else:
+            sf = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
+
+        sub_dir = output_dir / stem / sf
+        sub_dir.mkdir(parents=True, exist_ok=True)
+
+        output_file = sub_dir / f"iteration_{iteration:02d}.json"
+
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(result.model_dump(), f, indent=2, default=str)
-        
+
         logger.info(f"Output saved to {output_file}")
     except Exception as e:
         logger.warning(f"Failed to save output: {e}")

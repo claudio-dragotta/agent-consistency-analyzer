@@ -190,10 +190,17 @@ docker compose up -d --build
 curl http://localhost:8002/health
 ```
 
-Oppure usa lo script automatico:
+Oppure usa lo script automatico (consigliato):
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\START_DEMO.ps1
 ```
+
+Lo script e **completamente automatico**:
+1. Controlla se Ollama e in esecuzione e lo avvia se necessario
+2. Scarica il modello configurato (`mistral:7b`) se non presente
+3. Avvia i container Docker (`docker compose up -d --build`)
+4. Attende che n8n sia pronto (health check)
+5. Importa/aggiorna il workflow `workflow_complete_loop.json` via REST API — nessuna importazione manuale richiesta
 
 ### Pagine utili
 
@@ -275,7 +282,7 @@ Risposte suggerite:
 
 **Servizio**: `model_refiner.py`
 
-**Auto-fix** per problemi semplici (naming violations → conversione al passato).
+**Auto-fix** per problemi semplici (naming violations → conversione al passato; SEMANTIC_AMBIGUITY → aggiunge contesto disambiguante tramite regole senza LLM).
 
 **LLM-interpreted answers** (v2.0): quando l'utente risponde alle domande, il LLM interpreta ogni risposta e applica modifiche concrete al modello:
 
@@ -287,6 +294,8 @@ Risposte suggerite:
 | `resolve_conflict` | Registra la risoluzione del conflitto |
 | `add_mapping` | Aggiunge un mapping anti-corruption layer |
 | `update_pattern` | Aggiorna il pattern di integrazione |
+
+**Gestione SEMANTIC_AMBIGUITY senza LLM**: quando l'LLM non e raggiungibile, `model_refiner` applica una gestione rule-based esplicita per gli issue `SEMANTIC_AMBIGUITY` (aggiunge annotazioni di disambiguazione nel modello). Questo evita loop infiniti di iterazione nei casi in cui Ollama sia temporaneamente irraggiungibile.
 
 ### Stima Dinamica delle Iterazioni
 
@@ -347,7 +356,10 @@ Analisi completa del domain model.
   "domain_model": { "..." },
   "use_llm": true,
   "apply_auto_fixes": true,
-  "previous_answers": { "q0": "risposta utente", "q1": "altra risposta" }
+  "previous_answers": { "q0": "risposta utente", "q1": "altra risposta" },
+  "original_filename": "example_demo",
+  "session_id": "uuid-sessione",
+  "iteration": 1
 }
 ```
 
@@ -471,7 +483,7 @@ Quando l'API restituisce `status: "VALID"` (0 problemi), il workflow mostra una 
   - **Copia negli appunti**: copia il JSON formattato nella clipboard
   - **Mostra/Nascondi JSON**: anteprima inline con syntax highlighting (chiavi, stringhe, numeri, booleani colorati)
 
-Il modello raffinato e anche salvato lato server in `output_agent/validation_{task_id}.json` e, se il percorso Kafka e attivo, pubblicato su `agent2-output` per Agent 3.
+Il modello raffinato e anche salvato lato server in `output_agent/{original_filename}/{session_id}/iteration_{NN}.json` (struttura nested per file/sessione/iterazione) e, se il percorso Kafka e attivo, pubblicato su `agent2-output` per Agent 3.
 
 #### Comportamento del limite iterazioni (soft cap)
 
@@ -712,11 +724,18 @@ agent-consistency-analyzer/
 |   +-- docker-compose.kafka.yml   # Compose override per stack Kafka
 |   +-- README.md                  # Istruzioni per attivare le implementazioni future
 |
++-- output_agent/                  # Output analisi (gitignored)
+|   +-- {original_filename}/       # Cartella per file sorgente
+|       +-- {session_id}/          # Cartella per sessione
+|           +-- iteration_01.json  # Output iterazione 1
+|           +-- iteration_02.json  # Output iterazione 2
+|           +-- ...
+|
 +-- docker-compose.yml             # Core: agent2-api + n8n (2 servizi)
 +-- Dockerfile                     # Multi-stage build, Python 3.11
 +-- requirements.txt               # 30 dipendenze
 +-- .env                           # Configurazione ambiente
-+-- START_DEMO.ps1                 # Script avvio rapido PowerShell
++-- START_DEMO.ps1                 # Script avvio rapido PowerShell (auto-start Ollama, auto-import workflow)
 ```
 
 ---
@@ -821,8 +840,8 @@ Ogni regola include `question_template` per il fallback quando l'LLM non e dispo
 
 ## Versione
 
-- **Versione**: 2.0.0
+- **Versione**: 2.1.0
 - **Stato**: Production Ready
-- **Ultimo aggiornamento**: 2026-02-13
+- **Ultimo aggiornamento**: 2026-02-18
 - **Changelog**: vedi `CHANGELOG.md`
 - **Licenza**: MIT

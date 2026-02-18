@@ -75,7 +75,6 @@ services:
       - N8N_PUBLIC_API_KEY=agent2-api-key-12345
     volumes:
       - n8n_data:/home/node/.n8n
-      - ./n8n:/backup:ro
     networks:
       - agent2-network
     extra_hosts:

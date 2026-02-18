@@ -225,6 +225,76 @@ Write-Host ""
 Write-Info "[5/6] Verifica health status..."
 if ($useComposeV2) { & docker compose ps } else { & docker-compose ps }
 
+# Attendi che n8n sia pronto (non solo agent2-api)
+if (-not $useExternalN8n) {
+  Write-Host ""
+  Write-Info "Attesa avvio n8n (porta 5678)..."
+  $n8nReady = $false
+  $sw2 = [Diagnostics.Stopwatch]::StartNew()
+  while ($sw2.Elapsed.TotalSeconds -lt 120) {
+    try {
+      $r = Invoke-WebRequest -Uri 'http://127.0.0.1:5678/healthz' -UseBasicParsing -TimeoutSec 3
+      if ($r.StatusCode -eq 200) { $n8nReady = $true; break }
+    } catch {}
+    Write-Host "." -NoNewline
+    Start-Sleep -Seconds 2
+  }
+  Write-Host ""
+  if ($n8nReady) {
+    Write-Ok "[OK] n8n pronto in $([math]::Round($sw2.Elapsed.TotalSeconds))s"
+  } else {
+    Write-Warn "n8n non risponde dopo 120s, apro il browser comunque..."
+  }
+}
+
+# ── Auto-import workflow n8n (sempre aggiornato dal file su disco) ──────────
+if (-not $useExternalN8n -and $n8nReady) {
+  Write-Host ""
+  Write-Info "Importo automaticamente il workflow n8n..."
+  $n8nApiBase = 'http://127.0.0.1:5678/api/v1'
+  $n8nApiKey  = 'agent2-api-key-12345'
+  $wfFile     = Join-Path $PSScriptRoot 'n8n\workflow_complete_loop.json'
+  $n8nHeaders = @{ 'X-N8N-API-KEY' = $n8nApiKey }
+
+  try {
+    $wfBody = Get-Content $wfFile -Raw -Encoding UTF8
+    $wfName = ($wfBody | ConvertFrom-Json -ErrorAction Stop).name
+
+    # Lista workflow esistenti
+    $listResp = Invoke-RestMethod -Uri "$n8nApiBase/workflows?limit=100" `
+      -Headers $n8nHeaders -UseBasicParsing -ErrorAction Stop
+    $existing = $listResp.data | Where-Object { $_.name -eq $wfName } | Select-Object -First 1
+
+    if ($existing) {
+      # Aggiorna workflow esistente
+      $wfId = $existing.id
+      Invoke-RestMethod -Uri "$n8nApiBase/workflows/$wfId" -Method PUT `
+        -Headers $n8nHeaders -Body $wfBody `
+        -ContentType 'application/json; charset=utf-8' `
+        -UseBasicParsing -ErrorAction Stop | Out-Null
+      Write-Ok "[OK] Workflow aggiornato: '$wfName' (id=$wfId)"
+    } else {
+      # Crea nuovo workflow
+      $created = Invoke-RestMethod -Uri "$n8nApiBase/workflows" -Method POST `
+        -Headers $n8nHeaders -Body $wfBody `
+        -ContentType 'application/json; charset=utf-8' `
+        -UseBasicParsing -ErrorAction Stop
+      $wfId = $created.id
+      Write-Ok "[OK] Workflow creato: '$wfName' (id=$wfId)"
+    }
+
+    # Attiva il workflow
+    Invoke-RestMethod -Uri "$n8nApiBase/workflows/$wfId/activate" -Method POST `
+      -Headers $n8nHeaders -UseBasicParsing -ErrorAction Stop | Out-Null
+    Write-Ok "[OK] Workflow attivato -> apri: http://127.0.0.1:5678/webhook/agent2-start"
+
+  } catch {
+    Write-Warn "Import automatico workflow fallito: $($_.Exception.Message)"
+    Write-Host "  >> Importa manualmente in n8n: Workflows > Import from File > n8n/workflow_complete_loop.json"
+    Write-Host "  >> Attiva il workflow (toggle verde in alto a destra)"
+  }
+}
+
 Write-Host ""
 Write-Info "[6/6] Apertura pagine web..."
 Start-Process 'http://127.0.0.1:5678'
@@ -248,12 +318,10 @@ Write-Host "========================================"
 Write-Host "PROSSIMI PASSI:"
 Write-Host "========================================"
 Write-Host ""
-Write-Host "1. In n8n (http://127.0.0.1:5678):"
-Write-Host "   - Se prima volta: crea account (email/password)"
-Write-Host "   - Workflows > Import from File"
-Write-Host "   - Seleziona: n8n/workflow_complete_loop.json"
-Write-Host "   - Attiva il workflow (toggle verde)"
+Write-Host "1. Avvia l'analisi DDD:"
 Write-Host "   - Apri: http://127.0.0.1:5678/webhook/agent2-start"
+Write-Host "   - Il workflow e' gia' importato e attivo automaticamente"
+Write-Host "   - (Se prima volta su n8n: potresti dover creare un account)"
 Write-Host ""
 Write-Host "2. Per testare Agent 2:"
 Write-Host "   - Usa il workflow n8n (interfaccia visuale)"

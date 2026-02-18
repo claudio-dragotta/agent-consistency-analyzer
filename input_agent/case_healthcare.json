@@ -345,8 +345,8 @@
       "upstream": "authentication",
       "downstream": "clinical-management",
       "relationship": "conformist",
-      "integrationPattern": "sync-query",
-      "description": "Verifica permessi utente prima di ogni operazione clinica"
+      "integrationPattern": "open-host-service",
+      "description": "Verifica permessi utente prima di ogni operazione clinica tramite Open Host Service"
     }
   ],
 
