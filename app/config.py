@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     # Ollama Configuration
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "mistral:7b"
+    OLLAMA_MODEL: str = "qwen2.5:14b"
     OLLAMA_TIMEOUT: int = 120
 
     # Kafka Configuration (A2A Communication)

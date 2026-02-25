@@ -44,7 +44,7 @@ Agent 2 riceve un domain model JSON, lo analizza per coerenza semantica, rileva 
 | (UI)   |<----|  :8002/analyze          |     +--------------------------+
 +--------+     +-------------------------+
                      |
-                     | Ollama (mistral:7b)
+                     | Ollama (qwen2.5:14b)
                      v
                +-----+------+
                |   GPU/CPU   |
@@ -121,7 +121,7 @@ docker compose -f docker-compose.yml -f docker-compose.kafka.yml up -d --build
 
 | Servizio | Immagine | Porta | Perche esiste |
 |----------|----------|-------|---------------|
-| **agent2-api** | Build da `Dockerfile` locale | 8002 | **Cuore dell'applicazione**: FastAPI con 13 endpoint (`/analyze`, `/source/files`, `/health`, A2A). Chiamato da n8n per il loop interattivo e da Agent 1/3 via A2A. Limiti: 2 CPU, 2GB RAM. |
+| **agent2-api** | Build da `Dockerfile` locale | 8002 | **Cuore dell'applicazione**: FastAPI con 12 endpoint (`/analyze`, `/source/files`, `/health`, A2A). Chiamato da n8n per il loop interattivo e da Agent 1/3 via A2A. Limiti: 2 CPU, 2GB RAM. |
 | **n8n** | `n8nio/n8n:latest` | 5678 | **Orchestratore workflow interattivo**: gestisce il loop ricorsivo (scelta file → analisi → form domande → reinvio risposte → ri-analisi fino a VALID). Comunica con agent2-api via HTTP interno (`http://agent2-api:8002`). |
 
 #### Servizi Kafka (`docker-compose.kafka.yml`) — implementazione futura
@@ -163,7 +163,7 @@ In sintesi: l'unica immagine Docker costruita da noi e quella dell'Agent 2 (`Doc
 
 #### Variabili d'ambiente condivise
 
-Il blocco YAML anchor `x-common-env: &common-env` in cima al file definisce tutte le variabili una sola volta, poi le inietta in entrambi i servizi Agent 2 con `<<: *common-env`. Ogni variabile ha un default hardcoded (es. `${OLLAMA_MODEL:-mistral:7b}`) sovrascrivibile dal file `.env`.
+Il blocco YAML anchor `x-common-env: &common-env` in cima al file definisce tutte le variabili una sola volta, poi le inietta in entrambi i servizi Agent 2 con `<<: *common-env`. Ogni variabile ha un default hardcoded (es. `${OLLAMA_MODEL:-qwen2.5:14b}`) sovrascrivibile dal file `.env`.
 
 ---
 
@@ -172,9 +172,9 @@ Il blocco YAML anchor `x-common-env: &common-env` in cima al file definisce tutt
 ### Prerequisiti
 
 - **Docker Desktop** installato e in esecuzione
-- **Ollama** con modello `mistral:7b`:
+- **Ollama** con modello `qwen2.5:14b`:
   ```bash
-  ollama pull mistral:7b
+  ollama pull qwen2.5:14b
   ```
 
 ### Avvio
@@ -197,7 +197,7 @@ powershell -ExecutionPolicy Bypass -File .\START_DEMO.ps1
 
 Lo script e **completamente automatico**:
 1. Controlla se Ollama e in esecuzione e lo avvia se necessario
-2. Scarica il modello configurato (`mistral:7b`) se non presente
+2. Scarica il modello configurato (`qwen2.5:14b`) se non presente
 3. Avvia i container Docker (`docker compose up -d --build`)
 4. Attende che n8n sia pronto (health check)
 5. Importa/aggiorna il workflow `workflow_complete_loop.json` via REST API — nessuna importazione manuale richiesta
@@ -265,7 +265,7 @@ Applica 23 regole DDD dalla knowledge base + analisi LLM per rilevamento approfo
 
 **Servizio**: `question_generator.py`
 
-**Approccio LLM-first** (v2.0): quando `use_llm=true`, TUTTE le domande vengono generate da Mistral in una singola chiamata. Il LLM riceve tutti gli issue e produce domande **specifiche** con nomi reali e risposte suggerite azionabili.
+**Approccio LLM-first** (v2.0): quando `use_llm=true`, TUTTE le domande vengono generate da Qwen2.5 in una singola chiamata. Il LLM riceve tutti gli issue e produce domande **specifiche** con nomi reali e risposte suggerite azionabili.
 
 **Esempio output LLM**:
 ```
@@ -303,7 +303,7 @@ Dopo i 4 step di analisi, Agent 2 stima quante iterazioni del loop saranno neces
 
 **Strategia a due livelli**:
 
-1. **LLM (prioritario)**: se Ollama e raggiungibile, Mistral riceve un riepilogo dei problemi trovati (quantita, severita, tipologia) e restituisce un numero intero tra 1 e 10. Viene usato con `temperature: 0.1` per massima determinismo.
+1. **LLM (prioritario)**: se Ollama e raggiungibile, Qwen2.5 riceve un riepilogo dei problemi trovati (quantita, severita, tipologia) e restituisce un numero intero tra 1 e 10. Viene usato con `temperature: 0.1` per massima determinismo.
 
 2. **Euristica (fallback)**: se l'LLM non e disponibile o restituisce un valore non valido, viene applicata una formula basata sulla quantita e severita dei problemi:
 
@@ -341,7 +341,7 @@ Stato dei servizi e configurazione.
     "model_refiner": true
   },
   "config": {
-    "llm_model": "mistral:7b",
+    "llm_model": "qwen2.5:14b",
     "embeddings_model": "all-MiniLM-L6-v2"
   }
 }
@@ -505,24 +505,24 @@ Workflow semplice per test. Trigger manuale, esegue una singola analisi e mostra
 
 ## Modello LLM
 
-### Perche Mistral 7B e non Llama3
+### Perche Qwen2.5 14B e non Llama3
 
-La v1.x usava `llama3` (8B parametri). La v2.0 passa a `mistral:7b` per tre motivi:
+La v1.x usava `llama3` (8B parametri). La v2.0 passa a `qwen2.5:14b` per tre motivi:
 
-1. **VRAM**: la GPU di riferimento e una NVIDIA RTX 4070 con **8 GB VRAM**. Mistral 7B in formato Q4_K_M occupa ~4.4 GB e sta interamente in VRAM con margine per context window e batch. Llama3 8B occupa ~4.7 GB — funziona ma lascia meno spazio, rischiando offload su RAM con conseguente calo di velocita.
+1. **Qualita output strutturato**: Agent 2 richiede che l'LLM generi **JSON valido** (array di domande con `suggested_answers`, azioni strutturate per il refiner). Qwen2.5 14B eccelle nella generazione di JSON strutturato e nel seguire istruzioni complesse con vincoli di schema.
 
-2. **Qualita output strutturato**: Agent 2 richiede che l'LLM generi **JSON valido** (array di domande con `suggested_answers`, azioni strutturate per il refiner). Mistral 7B usa un instruction format piu rigido e rispetta meglio i vincoli di schema rispetto a Llama3 8B, che tende a generare testo di contorno prima del JSON.
+2. **Ragionamento multi-step**: L'analisi DDD richiede ragionamento contestuale su piu domini contemporaneamente. Qwen2.5 14B offre capacita di ragionamento superiori ai modelli 7B su task di classificazione e analisi semantica.
 
-3. **Velocita di inferenza**: Mistral usa un'architettura con **Grouped-Query Attention (GQA)** e **Sliding Window Attention (SWA)**, che lo rende piu veloce in generazione a parita di parametri. Per un agente che fa piu chiamate LLM per iterazione (generare domande + interpretare ogni risposta), la velocita e un fattore critico.
+3. **VRAM disponibile**: La GPU di riferimento e una NVIDIA RTX 4070 con **8 GB VRAM**. Qwen2.5 14B in formato Q4_K_M occupa ~9 GB; con offload parziale su RAM funziona correttamente su questa configurazione, beneficiando di maggiore capacita rispetto a modelli 7B.
 
 ### Configurazione attuale
 
 | Parametro | Valore |
 |-----------|--------|
-| Modello | `mistral:7b` |
+| Modello | `qwen2.5:14b` |
 | Quantizzazione | Q4_K_M |
-| Dimensione | 4.4 GB |
-| VRAM necessaria | ~5 GB |
+| Dimensione | ~9 GB (Q4_K_M) |
+| VRAM necessaria | ~9 GB |
 | Provider | Ollama (locale) |
 
 ### Dove viene usato l'LLM
@@ -543,7 +543,7 @@ La v1.x usava `llama3` (8B parametri). La v2.0 passa a `mistral:7b` per tre moti
 
 | Modello | VRAM | Velocita | Qualita JSON |
 |---------|------|----------|--------------|
-| `mistral:7b` | ~5 GB | Veloce | Buona |
+| `qwen2.5:14b` | ~5 GB | Veloce | Buona |
 | `llama3` (8B) | ~5.5 GB | Veloce | Media |
 | `qwen2.5-coder:14b` | ~10 GB | Lenta (CPU offload) | Buona |
 
@@ -692,7 +692,7 @@ La v1.x usava `llama3` (8B parametri). La v2.0 passa a `mistral:7b` per tre moti
 agent-consistency-analyzer/
 |
 +-- app/
-|   +-- main.py                    # FastAPI, 13 endpoint, orchestrazione pipeline
+|   +-- main.py                    # FastAPI, 12 endpoint, orchestrazione pipeline
 |   +-- config.py                  # Settings da env (Pydantic)
 |   +-- services/
 |       +-- semantic_analyzer.py   # Step 1: embeddings, entity overlap
@@ -731,6 +731,17 @@ agent-consistency-analyzer/
 |           +-- iteration_02.json  # Output iterazione 2
 |           +-- ...
 |
++-- latex/                         # Documentazione e presentazioni
+|   +-- agent2.pptx                # Presentazione del progetto
+|   +-- case_test/                 # Documenti e immagini per i test case
+|   |   +-- TEST_CASES_DOCUMENT.md # Documento test case in Markdown
+|   |   +-- Test_case_agent2.tex   # Documento test case in LaTeX
+|   |   +-- domande.png            # Screenshot UI — form domande
+|   |   +-- open_page.png          # Screenshot UI — pagina iniziale
+|   |   +-- scelta_json.png        # Screenshot UI — selezione file
+|   +-- documentazzione/
+|       +-- Documentazione_agente2.tex  # Documentazione tecnica in LaTeX
+|
 +-- docker-compose.yml             # Core: agent2-api + n8n (2 servizi)
 +-- Dockerfile                     # Multi-stage build, Python 3.11
 +-- requirements.txt               # 30 dipendenze
@@ -747,7 +758,7 @@ agent-consistency-analyzer/
 ```bash
 # Ollama
 OLLAMA_BASE_URL=http://host.docker.internal:11434
-OLLAMA_MODEL=mistral:7b
+OLLAMA_MODEL=qwen2.5:14b
 OLLAMA_TIMEOUT=120
 
 # Kafka
@@ -834,7 +845,7 @@ Ogni regola include `question_template` per il fallback quando l'LLM non e dispo
 | Analisi lenta | Imposta `use_llm=false` in `/analyze` per saltare le chiamate LLM |
 | Ollama non raggiungibile | Verificare che Ollama sia avviato: `ollama list` |
 | Docker non parte | Aprire Docker Desktop manualmente, poi `docker compose up -d` |
-| Domande generiche | Verificare che `OLLAMA_MODEL=mistral:7b` nel `.env` e che Ollama sia raggiungibile |
+| Domande generiche | Verificare che `OLLAMA_MODEL=qwen2.5:14b` nel `.env` e che Ollama sia raggiungibile |
 
 ---
 
@@ -842,6 +853,6 @@ Ogni regola include `question_template` per il fallback quando l'LLM non e dispo
 
 - **Versione**: 2.1.0
 - **Stato**: Production Ready
-- **Ultimo aggiornamento**: 2026-02-18
+- **Ultimo aggiornamento**: 2026-02-25
 - **Changelog**: vedi `CHANGELOG.md`
 - **Licenza**: MIT

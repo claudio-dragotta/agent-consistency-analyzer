@@ -33,7 +33,7 @@
       },
       {
         "uri": "https://intelligent-domain-architect.io/extensions/llm-reasoning/v1",
-        "description": "LLM-based semantic reasoning using Ollama/Mistral 7B",
+        "description": "LLM-based semantic reasoning using Ollama/Qwen2.5 14B",
         "required": false
       }
     ]
@@ -272,7 +272,7 @@
     },
     "llm": {
       "provider": "ollama",
-      "model": "mistral:7b",
+      "model": "qwen2.5:14b",
       "endpoint": "http://localhost:11434"
     },
     "analysis": {

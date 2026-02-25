@@ -7,7 +7,7 @@
 x-common-env: &common-env
   # Ollama Configuration
   OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-  OLLAMA_MODEL: ${OLLAMA_MODEL:-mistral:7b}
+  OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:14b}
   OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-180}
 
   # Application Configuration

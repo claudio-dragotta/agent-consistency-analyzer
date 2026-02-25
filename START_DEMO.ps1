@@ -132,7 +132,7 @@ function Ensure-OllamaReady {
   Write-Ok "[OK] Ollama attivo su localhost:11434"
 
   # Leggi il modello configurato da .env (o usa il default del docker-compose)
-  $model = "mistral:7b"
+  $model = "qwen2.5:14b"
   if (Test-Path ".env") {
     $envLine = Get-Content ".env" | Where-Object { $_ -match "^OLLAMA_MODEL=" }
     if ($envLine) { $model = ($envLine -split "=", 2)[1].Trim() }

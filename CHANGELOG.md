@@ -8,7 +8,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 ## [2.0.0] - 2026-02-13
 
 ### Added
-- **LLM-First Question Generation**: Le domande di follow-up sono ora generate interamente da Mistral 7B
+- **LLM-First Question Generation**: Le domande di follow-up sono ora generate interamente da Qwen2.5 14B
   - Ogni domanda menziona nomi reali di entità, domini ed eventi del modello
   - Ogni domanda ha esattamente 3 `suggested_answers` con azioni specifiche e concrete
   - Sistema di fallback automatico a template se LLM non disponibile
@@ -21,7 +21,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - **Conflict Resolution Tracking**: Registrazione risoluzioni in `_conflictResolutions`
 
 ### Changed
-- **Modello LLM predefinito**: Da `llama3` a `mistral:7b` (ottimale per GPU con 8GB VRAM)
+- **Modello LLM predefinito**: Da `llama3` a `qwen2.5:14b` (ottimale per GPU con 8GB+ VRAM)
   - Aggiornato in `docker-compose.yml`, `app/config.py`, `.env`
 - **`app/services/question_generator.py`**: Riscrittura completa
   - `_generate_all_questions_llm()` genera tutte le domande in una singola chiamata LLM

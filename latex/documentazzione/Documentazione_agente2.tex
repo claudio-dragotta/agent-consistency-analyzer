@@ -1,0 +1,2885 @@
+\documentclass[12pt,a4paper]{report}
+
+% --- Packages ----------------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[italian]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tcolorbox}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{microtype}
+\usepackage{parskip}
+\usepackage{palatino}              % Serif più elegante di Computer Modern
+\usepackage{tabularx}              % Tabelle con colonne auto-adattive
+\usepackage{tikz}      
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning}
+
+\lstdefinestyle{bashbox}{
+  language=bash,
+  basicstyle=\ttfamily\footnotesize,
+  columns=fullflexible,
+  breaklines=true,
+  breakatwhitespace=true,
+  showstringspaces=false,
+  frame=none,
+  xleftmargin=0pt,
+  xrightmargin=0pt,
+  aboveskip=6pt,
+  belowskip=6pt
+}
+\usepackage{pdfpages}              % Inclusione pagine PDF
+
+\geometry{
+  top=2.5cm, bottom=2.5cm,
+  left=3cm,  right=3cm
+}
+
+% --- Liste compatte ----------------------------------------------------------
+\setlist[itemize]{itemsep=3pt, parsep=2pt, topsep=4pt}
+\setlist[enumerate]{itemsep=3pt, parsep=2pt, topsep=4pt}
+
+% --- Colors ------------------------------------------------------------------
+\definecolor{agentblue}{RGB}{30,80,160}
+\definecolor{agentdark}{RGB}{18,50,100}
+\definecolor{lightgray}{RGB}{245,245,245}
+\definecolor{darkgray}{RGB}{80,80,80}
+\definecolor{codebg}{RGB}{248,248,248}
+\definecolor{bordercolor}{RGB}{200,200,200}
+\definecolor{boxheader}{RGB}{50,50,50}
+\definecolor{chaptercolor}{RGB}{25,65,140}
+\definecolor{rulecolor}{RGB}{180,200,230}
+\definecolor{tableheader}{RGB}{235,242,252}
+
+% --- Hyperref ----------------------------------------------------------------
+\hypersetup{
+  colorlinks=true,
+  linkcolor=agentblue,
+  urlcolor=agentblue,
+  citecolor=agentblue,
+  pdftitle={Agent 2 - Consistency \& Conflict Analyzer},
+  pdfauthor={Intelligent Domain Architect Team}
+}
+
+% --- tcolorbox styles --------------------------------------------------------
+\tcbuselibrary{skins,breakable}
+
+\newtcolorbox{technicalbox}[1]{
+  enhanced,
+  title={#1},
+  colback=lightgray,
+  colframe=agentblue!70!black,
+  colbacktitle=agentblue,
+  coltitle=white,
+  fonttitle=\small\bfseries\sffamily,
+  breakable,
+  boxrule=0.6pt,
+  arc=3pt,
+  left=8pt,
+  right=8pt,
+  top=6pt,
+  bottom=6pt,
+  shadow={1pt}{-1pt}{0pt}{black!15}
+}
+
+% --- Listings ----------------------------------------------------------------
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  framesep=6pt,
+  xleftmargin=8pt,
+  xrightmargin=8pt,
+  rulecolor=\color{agentblue!30},
+  breaklines=true,
+  breakatwhitespace=true,
+  showstringspaces=false,
+  tabsize=2,
+  captionpos=b,
+  numbers=left,
+  numberstyle=\tiny\color{darkgray},
+  numbersep=8pt,
+  keywordstyle=\color{agentblue}\bfseries,
+  commentstyle=\color{darkgray}\itshape,
+  stringstyle=\color{agentblue!60!black}
+}
+
+% --- Captions ----------------------------------------------------------------
+\captionsetup{
+  font=small,
+  labelfont={bf,color=agentblue},
+  textfont={it},
+  skip=8pt
+}
+
+% --- Headers/Footers ---------------------------------------------------------
+\pagestyle{fancy}
+\setlength{\headheight}{16pt}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{agentblue}{\textit{Agent 2 -- Consistency \& Conflict Analyzer}}}
+\fancyhead[R]{\small\textcolor{darkgray}{\textit{Intelligent Domain Architect}}}
+\fancyfoot[C]{\textcolor{darkgray}{\thepage}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{rulecolor}\leaders\hrule height \headrulewidth\hfill}}
+
+% --- Chapter/Section titles --------------------------------------------------
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries\color{chaptercolor}}
+  {\tikz[remember picture,overlay]\node[fill=agentblue,text=white,
+    minimum width=2.5cm,minimum height=2.5cm,font=\fontsize{50}{60}\selectfont\bfseries,
+    inner sep=0pt] at ([xshift=1.25cm,yshift=-1.25cm]current page.north west|-0,0)
+    {\thechapter}; \hspace{2.8cm}\textcolor{darkgray}{\Large\MakeUppercase{\chaptertitlename}}}
+  {10pt}{\Huge}
+  [\vspace{-5pt}{\color{rulecolor}\titlerule[2pt]}]
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{agentblue}}{\thesection}{1em}{}
+  [\vspace{-5pt}{\color{rulecolor}\titlerule[0.6pt]}]
+
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{agentdark}}{\thesubsection}{1em}{}
+
+% Riduce lo spazio bianco sopra i titoli di capitolo
+\titlespacing*{\chapter}{0pt}{-10pt}{30pt}
+
+% -----------------------------------------------------------------------------
+\raggedbottom  % Evita troppo spazio verticale tra paragrafi
+
+\begin{document}
+
+% --- Title Page --------------------------------------------------------------
+\begin{titlepage}
+  \begin{tikzpicture}[remember picture,overlay]
+    % Barra laterale sinistra
+    \fill[agentblue] (current page.north west) rectangle
+      ([xshift=1.2cm]current page.south west);
+    % Riga decorativa in alto
+    \fill[agentblue!80] ([yshift=-3cm]current page.north west) rectangle
+      ([yshift=-3.08cm]current page.north east);
+    % Riga decorativa in basso
+    \fill[agentblue!80] ([yshift=3cm]current page.south west) rectangle
+      ([yshift=3.08cm]current page.south east);
+  \end{tikzpicture}
+
+  \centering
+  \vspace*{0.8cm}
+  {\large\textbf{\textcolor{agentblue}{Università Campus Bio-Medico di Roma}}\\[4pt]}
+  {\normalsize Facoltà di Ingegneria\\[2pt]}
+  {\normalsize Corso di Laurea in Ingegneria dei Sistemi Intelligenti\\}
+\vspace{3cm}
+  {\color{rulecolor}\rule{0.6\textwidth}{1.5pt}}\\[0.8cm]
+  {\Huge\textbf{\textcolor{agentblue}{Agent 2}}}\\[0.5cm]
+  {\LARGE\textbf{\textcolor{agentdark}{Consistency \& Conflict Analyzer}}}\\[0.5cm]
+  {\color{rulecolor}\rule{0.6\textwidth}{1.5pt}}\\[1cm]
+  {\large Un microservizio intelligente per la validazione semantica\\
+  di modelli Domain-Driven Design nella pipeline\\
+  \textit{Intelligent Domain Architect}}
+
+  \vfill
+
+  \begin{minipage}[t]{0.45\textwidth}
+    {\small\textcolor{darkgray}{\textit{Studenti:}}}\\[4pt]
+    Claudio \textbf{Dragotta}\\
+    Matteo \textbf{Grande}
+  \end{minipage}
+  \hfill
+  \begin{minipage}[t]{0.45\textwidth}
+    \raggedleft
+    {\small\textcolor{darkgray}{\textit{Docenti:}}}\\[4pt]
+    Ing.\ Floriano Caprio \\
+    Dott.\ Ing. Ermanno Cordelli
+  \end{minipage}
+
+  \vspace{1.5cm}
+  {\color{rulecolor}\rule{0.4\textwidth}{0.8pt}}\\[6pt]
+  {\normalsize Anno Accademico 2025/2026}
+\end{titlepage}
+
+% --- ToC ---------------------------------------------------------------------
+\tableofcontents
+\clearpage
+
+% --- List of Figures ---------------------------------------------------------
+\listoffigures
+\clearpage
+
+% --- List of Tables ----------------------------------------------------------
+\listoftables
+\clearpage
+
+% =============================================================================
+\chapter{Executive Summary}
+% =============================================================================
+
+\section{Visione Strategica}
+
+L'\textbf{Agent 2 -- Consistency \& Conflict Analyzer} è il secondo nodo della pipeline
+\textit{Intelligent Domain Architect} (Agent~1 $\rightarrow$ \textbf{Agent~2} $\rightarrow$ Agent~3).
+Il suo scopo è trasformare un \textit{domain model} grezzo prodotto dall'Agent~1
+in un artefatto validato, coerente e pronto per la generazione automatica di specifiche
+microservizi da parte dell'Agent~3.
+
+Il sistema rileva in modo sistematico le incoerenze semantiche, i conflitti tra bounded
+context e le violazioni delle regole DDD, ponendo l'utente al centro di un ciclo
+iterativo di miglioramento guidato da domande contestuali.
+
+\section{Value Proposition}
+
+A differenza di un semplice linter sintattico, Agent~2 ragiona sul \textit{significato} del modello
+attraverso tre pilastri:
+
+\begin{itemize}
+  \item \textbf{Analisi Semantica Profonda:} L'embedding \texttt{all-MiniLM-L6-v2}
+        calcola la similarità vettoriale tra entità di bounded context diversi,
+        rilevando sovrapposizioni (\textit{Entity Overlap}) e ambiguità terminologiche
+        invisibili a un'analisi puramente sintattica.
+
+  \item \textbf{Governance DDD Certificata:} 22 regole DDD strutturate in 7 categorie
+        (classificazione dominio, bounded context, entità, ownership, requisiti, eventi,
+        pattern comunicazione) vengono applicate sistematicamente, con l'LLM Qwen2.5~14B
+        che approfondisce i casi complessi.
+
+  \item \textbf{Raffinamento Iterativo Interattivo:} Il workflow n8n gestisce un loop
+        adattivo in cui le risposte dell'utente vengono interpretate dall'LLM e
+        applicate strutturalmente al modello prima di ogni nuova iterazione,
+        convergendo verso lo stato \texttt{VALID}.
+\end{itemize}
+\section{Sintesi Tecnica}
+
+L'architettura si articola in due modalità operative:
+
+\begin{enumerate}
+  \item \textbf{Modalità REST interattiva (default):} \texttt{agent2-api} espone
+        12 endpoint FastAPI; n8n orchestra il loop utente tramite webhook e form HTML
+        dinamici.
+  \item \textbf{Modalità Kafka asincrona (predisposta):} \texttt{agent2-consumer}
+        ascolta il topic \texttt{agent1-output}, processa i modelli in parallelo con
+        fino a $N$ repliche e pubblica i risultati su \texttt{agent2-output} per Agent~3.
+\end{enumerate}
+
+Entrambe le modalità condividono la stessa immagine Docker e lo stesso motore di analisi.
+Ollama con Qwen2.5~14B gira sull'host con accesso diretto alla GPU (NVIDIA RTX~4070,
+8~GB VRAM), raggiunto dai container via \texttt{host.docker.internal:11434}.
+
+\section{Posizionamento nella Pipeline}
+
+Agent~2 occupa una posizione strategica come \textit{quality gate} obbligatorio tra
+la fase di analisi del dominio (Agent~1) e la fase di generazione delle specifiche
+tecniche (Agent~3). Questa collocazione garantisce che nessun modello DDD difettoso
+raggiunga la fase di implementazione, analogamente a un gate CI/CD che blocca i
+commit non conformi prima del deployment in produzione.
+
+\section{Risultati Chiave Misurabili}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{Metrica} & \textbf{Valore} & \textbf{Condizione} \\
+\midrule
+Tipologie di issue rilevate & 7 categorie & Copertura completa DDD \\
+Regole DDD applicate & 22 regole & 7 categorie knowledge base \\
+Tempo analisi (no LLM) & $<$5s & Modalità \texttt{use\_llm=false} \\
+Timeout analisi (con LLM) & 180s max & Configurabile via .env \\
+Fallback automatici & 4 livelli & LLM $\rightarrow$ euristica $\rightarrow$ template \\
+Iterazioni stimate & 1--7 & Dipende da complessità modello \\
+\bottomrule
+\end{tabularx}
+\caption{Metriche chiave di Agent~2}
+\label{tab:exec-metrics}
+\end{table}
+
+
+% =============================================================================
+\chapter{Fondamenti: Domain-Driven Design e Architetture Event-Driven}
+% =============================================================================
+
+Il presente capitolo introduce i due pilastri teorici su cui si fonda l'intera
+pipeline \textit{Intelligent Domain Architect}: il \textbf{Domain-Driven Design}
+(DDD) e le \textbf{architetture event-driven}. La comprensione di questi paradigmi
+è essenziale per apprezzare le scelte architetturali, le regole di validazione e
+i meccanismi di comunicazione tra agenti descritti nei capitoli successivi.
+
+% -----------------------------------------------------------------------------
+\section{Domain-Driven Design}
+% -----------------------------------------------------------------------------
+
+Il Domain-Driven Design è un approccio alla progettazione del software introdotto
+da Eric Evans nel 2003 con il testo \textit{Domain-Driven Design: Tackling Complexity
+in the Heart of Software}. L'idea centrale è che la complessità di un sistema
+software risiede nel dominio di business, non nella tecnologia: di conseguenza,
+il modello del dominio deve guidare ogni decisione progettuale.
+
+\subsection{Strategic Design}
+
+Lo \textit{Strategic Design} opera a livello macro e si occupa di suddividere un
+dominio complesso in sotto-domini gestibili, ciascuno con confini ben definiti.
+
+\begin{description}[style=nextline, leftmargin=1.5cm]
+  \item[\textsf{Dominio e Sotto-domini}]
+    Un \textbf{dominio} è lo spazio del problema che il software deve risolvere.
+    Viene partizionato in sotto-domini classificati per rilevanza strategica:
+    \begin{itemize}
+      \item \textbf{Core Domain} -- il differenziatore competitivo dell'organizzazione,
+            dove si concentra il massimo investimento progettuale.
+      \item \textbf{Supporting Domain} -- funzionalità necessarie che supportano il
+            Core, ma che non costituiscono vantaggio competitivo diretto.
+      \item \textbf{Generic Domain} -- problemi già risolti dal mercato
+            (autenticazione, logging, pagamenti), spesso delegabili a soluzioni
+            esterne o librerie consolidate.
+    \end{itemize}
+
+  \item[\textsf{Bounded Context}]
+    Un \textbf{bounded context} è il confine esplicito entro cui un determinato
+    modello di dominio è valido e coerente. All'interno di un bounded context,
+    ogni termine ha un significato univoco; al di fuori, lo stesso termine può
+    assumere significati diversi. Ad esempio, il concetto di \texttt{Product} nel
+    contesto \textit{Catalog} descrive attributi commerciali (nome, prezzo,
+    descrizione), mentre nel contesto \textit{Warehouse} si riferisce a giacenza,
+    posizione a scaffale e lotto di produzione.
+
+    La corretta identificazione dei bounded context è il prerequisito per una
+    architettura a microservizi coerente: ogni microservizio dovrebbe corrispondere
+    a un bounded context, evitando accoppiamenti impliciti.
+
+  \item[\textsf{Ubiquitous Language}]
+    All'interno di ogni bounded context, sviluppatori ed esperti di dominio
+    condividono un \textbf{linguaggio ubiquo}: un vocabolario preciso e non ambiguo
+    che viene usato nel codice, nella documentazione, nelle conversazioni e nei
+    test. La violazione dell'ubiquitous language -- ad esempio usare sinonimi
+    informali o termini tecnici non condivisi -- è una delle cause più frequenti
+    di disallineamento tra requisiti e implementazione.
+
+  \item[\textsf{Context Map}]
+    La \textbf{Context Map} è la rappresentazione delle relazioni tra bounded
+    context. Evans definisce diversi pattern di integrazione, tra cui:
+    \begin{itemize}
+      \item \textbf{Shared Kernel} -- due contesti condividono una porzione di
+            modello, con responsabilità congiunta sulle modifiche.
+      \item \textbf{Customer-Supplier} -- un contesto (supplier) fornisce dati
+            a un altro (customer), con contratti espliciti sulle interfacce.
+      \item \textbf{Conformist} -- il contesto a valle adotta il modello del
+            contesto a monte senza negoziare, subendo le modifiche imposte.
+      \item \textbf{Anticorruption Layer (ACL)} -- il contesto a valle costruisce
+            uno strato di traduzione che protegge il proprio modello dalle
+            contaminazioni del modello a monte.
+      \item \textbf{Open Host Service} -- il contesto a monte espone un servizio
+            ben definito (es.\ API REST) che altri contesti possono consumare.
+      \item \textbf{Published Language} -- un formato di scambio condiviso
+            (es.\ JSON Schema, Protobuf, Avro) definisce il contratto di
+            comunicazione tra contesti.
+      \item \textbf{Separate Ways} -- nessuna integrazione; i contesti operano
+            in completa autonomia, utile per domini di supporto non correlati.
+    \end{itemize}
+\end{description}
+
+\subsection{Tactical Design}
+
+Il \textit{Tactical Design} opera a livello micro, all'interno di un singolo
+bounded context, e fornisce i building block per modellare il dominio nel codice.
+
+\begin{description}[style=nextline, leftmargin=1.5cm]
+  \item[\textsf{Entity}]
+    Un oggetto definito dalla sua \textbf{identità} piuttosto che dai suoi
+    attributi. Due entità con gli stessi attributi ma identità diverse sono oggetti
+    distinti (es.\ due clienti con lo stesso nome ma \texttt{id} diverso).
+
+  \item[\textsf{Value Object}]
+    Un oggetto \textbf{immutabile} definito esclusivamente dai suoi attributi, privo
+    di identità propria. Due value object con gli stessi attributi sono considerati
+    equivalenti (es.\ un indirizzo, un importo monetario, un intervallo di date).
+
+  \item[\textsf{Aggregate}]
+    Un cluster di entity e value object trattato come un'\textbf{unità transazionale}
+    unica. L'accesso dall'esterno avviene esclusivamente attraverso l'\textbf{Aggregate
+    Root}, che garantisce le invarianti di business. Ad esempio, un \texttt{Order}
+    (aggregate root) contiene \texttt{OrderLine} (entity) e \texttt{Money} (value
+    object); nessun componente esterno modifica direttamente una \texttt{OrderLine}
+    senza passare da \texttt{Order}.
+
+  \item[\textsf{Domain Event}]
+    Un fatto significativo che è accaduto nel dominio, espresso al \textbf{passato}
+    (es.\ \texttt{OrderPlaced}, \texttt{PaymentConfirmed}). I domain event sono il
+    meccanismo naturale attraverso cui i bounded context comunicano in modo
+    disaccoppiato: un contesto emette un evento, altri contesti interessati lo
+    consumano e reagiscono secondo la propria logica.
+
+  \item[\textsf{Repository}]
+    L'astrazione che fornisce accesso agli aggregati come se fossero in una
+    collezione in memoria, nascondendo i dettagli di persistenza.
+
+  \item[\textsf{Domain Service}]
+    Logica di dominio che non appartiene naturalmente a nessuna entity o value
+    object, ma che opera su più aggregati o richiede collaborazione tra essi
+    (es.\ un servizio di calcolo tariffe che coinvolge \texttt{Customer},
+    \texttt{Product} e \texttt{PricingPolicy}).
+\end{description}
+
+\begin{technicalbox}{Perché il DDD è rilevante per Agent~2}
+Agent~2 valida un domain model verificando il rispetto di questi principi:
+controlla che ogni bounded context abbia un linguaggio coerente, che le entità
+non siano duplicate tra contesti, che gli aggregati rispettino le invarianti,
+che gli eventi seguano la naming convention al passato e che i pattern di
+comunicazione nella context map siano compatibili. Le 22~regole della knowledge
+base di Agent~2 sono una formalizzazione operativa dei principi DDD descritti
+in questa sezione.
+\end{technicalbox}
+
+% -----------------------------------------------------------------------------
+\section{Architetture Event-Driven}
+% -----------------------------------------------------------------------------
+
+Un'\textbf{architettura event-driven} (EDA) è un paradigma in cui i componenti del
+sistema comunicano attraverso la produzione, il rilevamento e il consumo di
+\textit{eventi}. A differenza delle architetture request-response tradizionali, in
+cui un componente invoca esplicitamente un altro e attende la risposta, nell'EDA
+il produttore emette un evento senza conoscere i consumatori: questo
+\textit{disaccoppiamento} è il vantaggio fondamentale del paradigma.
+
+\subsection{Concetti Chiave}
+
+\begin{description}[style=nextline, leftmargin=1.5cm]
+  \item[\textsf{Evento}]
+    Un record immutabile che descrive un fatto accaduto nel sistema.
+    Contiene tipicamente un tipo (es.\ \texttt{OrderPlaced}), un timestamp, un
+    payload con i dati rilevanti e metadati di correlazione.
+
+  \item[\textsf{Producer e Consumer}]
+    Il \textbf{producer} è il componente che emette l'evento; il \textbf{consumer}
+    è il componente che lo riceve e reagisce. Un singolo evento può avere zero,
+    uno o molti consumer, abilitando pattern \textit{fan-out} senza modifiche al
+    producer.
+
+  \item[\textsf{Broker / Message Bus}]
+    L'infrastruttura che media tra producer e consumer. Il broker riceve gli eventi,
+    li persiste (garantendo durabilità) e li consegna ai consumer registrati.
+    Esempi diffusi includono Apache Kafka, RabbitMQ e Amazon SNS/SQS.
+
+  \item[\textsf{Topic e Partizione}]
+    In broker come Apache Kafka, gli eventi vengono pubblicati su \textbf{topic}
+    logici. Ogni topic è suddiviso in \textbf{partizioni} che consentono il
+    parallelismo: più consumer possono leggere partizioni diverse
+    contemporaneamente, scalando orizzontalmente il throughput.
+\end{description}
+
+\subsection{Pattern di Comunicazione}
+
+Le architetture event-driven si articolano in diversi pattern, ciascuno con
+caratteristiche e trade-off specifici:
+
+\begin{description}[style=nextline, leftmargin=1.5cm]
+  \item[\textsf{Event Notification}]
+    Il producer emette un evento minimale (es.\ \texttt{OrderPlaced\{orderId:
+    "123"\}}) che segnala che qualcosa è accaduto, senza includere tutti i dati.
+    I consumer interessati effettuano una callback al producer per recuperare i
+    dettagli. Questo pattern minimizza la dimensione dei messaggi ma introduce
+    un accoppiamento temporale.
+
+  \item[\textsf{Event-Carried State Transfer}]
+    L'evento contiene tutti i dati necessari affinché i consumer possano operare
+    senza callback (es.\ \texttt{OrderPlaced\{orderId, items, total, customer\}}).
+    Elimina l'accoppiamento temporale a costo di messaggi più pesanti e della
+    necessità di gestire la consistenza eventuale dei dati replicati.
+
+  \item[\textsf{Event Sourcing}]
+    Lo stato di un'entità non viene memorizzato come snapshot, ma come sequenza
+    ordinata di tutti gli eventi che lo hanno prodotto. Lo stato corrente si
+    ottiene riproducendo (\textit{replaying}) la sequenza. Questo pattern offre
+    un audit trail completo e la possibilità di ricostruire lo stato a qualsiasi
+    punto nel tempo, ma aumenta la complessità di query e gestione.
+
+  \item[\textsf{CQRS (Command Query Responsibility Segregation)}]
+    Separa il modello di \textit{scrittura} (command) dal modello di
+    \textit{lettura} (query). I comandi producono eventi che aggiornano il modello
+    di scrittura; proiezioni asincrone materializzano viste ottimizzate per la
+    lettura. CQRS si combina frequentemente con Event Sourcing per ottenere
+    massima scalabilità e flessibilità.
+\end{description}
+
+\subsection{Gestione dei Flussi di Business: Orchestrazione vs Coreografia}
+
+Quando un processo di business coinvolge più servizi (es.\ creazione ordine
+$\rightarrow$ pagamento $\rightarrow$ aggiornamento inventario $\rightarrow$
+notifica), esistono due strategie per coordinare il flusso:
+
+\begin{description}[style=nextline, leftmargin=1.5cm]
+  \item[\textsf{Orchestrazione}]
+    Un \textbf{orchestratore centrale} conosce l'intero flusso di lavoro: riceve
+    un evento iniziale, invoca i servizi nella sequenza corretta e gestisce gli
+    errori. La logica di business è centralizzata, il che semplifica la comprensione
+    del flusso ma introduce un \textit{single point of failure} e un forte
+    accoppiamento (l'orchestratore deve conoscere tutti i servizi).
+
+  \item[\textsf{Coreografia}]
+    Nessun controllore centrale: ogni servizio è \textbf{indipendente} e reagisce
+    agli eventi pubblicati dagli altri. Ad esempio, \texttt{OrderService} pubblica
+    \texttt{OrderCreated}; \texttt{PaymentService} lo ascolta, processa il
+    pagamento e pubblica \texttt{PaymentProcessed}; \texttt{InventoryService}
+    ascolta \texttt{PaymentProcessed} e aggiorna la giacenza. Il sistema è molto
+    disaccoppiato e resiliente, ma il flusso complessivo è distribuito e più
+    difficile da monitorare.
+\end{description}
+
+\begin{technicalbox}{Orchestrazione vs Coreografia: Quando Usare Quale}
+\textbf{Orchestrazione:} flussi complessi con logica di compensazione esplicita
+(es.\ saga pattern), dove il monitoraggio centralizzato è prioritario.
+Se un servizio muore, l'orchestratore se ne accorge immediatamente e può
+eseguire retry o segnare l'operazione come fallita.
+
+\textbf{Coreografia:} sistemi altamente scalabili dove il disaccoppiamento è
+prioritario. Se un servizio muore, i messaggi non consumati restano nel broker
+e verranno elaborati al ripristino. Ogni consumer è potenzialmente anche un
+producer, creando una catena reattiva di eventi.
+\end{technicalbox}
+
+\subsection{Vantaggi e Sfide}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{>{\bfseries}l X}
+\toprule
+\textbf{Vantaggi} & \textbf{Descrizione} \\
+\midrule
+Disaccoppiamento   & Producer e consumer evolvono indipendentemente; nuovi
+                     consumer possono essere aggiunti senza modificare i producer. \\
+Scalabilità        & Il parallelismo a livello di partizioni consente di scalare
+                     orizzontalmente il throughput di elaborazione. \\
+Resilienza         & Il broker persiste gli eventi; se un consumer è
+                     temporaneamente non disponibile, elaborerà i messaggi al
+                     ripristino. \\
+Estensibilità      & Aggiungere nuove reazioni a un evento non richiede
+                     modifiche ai componenti esistenti (principio Open-Closed). \\
+\bottomrule
+\end{tabularx}
+\caption{Vantaggi delle architetture event-driven}
+\label{tab:eda-vantaggi}
+\end{table}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{>{\bfseries}l X}
+\toprule
+\textbf{Sfide} & \textbf{Descrizione} \\
+\midrule
+Consistenza eventuale & I dati tra servizi non sono immediatamente allineati;
+                        occorre progettare per la \textit{eventual consistency}. \\
+Osservabilità         & Tracciare il flusso di un evento attraverso molteplici
+                        consumer richiede strumenti di tracing distribuito
+                        (es.\ correlation ID). \\
+Ordinamento           & Garantire l'ordine di elaborazione degli eventi è
+                        possibile solo all'interno di una singola partizione. \\
+Complessità operativa & La gestione di un broker (configurazione, monitoraggio,
+                        retention) aggiunge overhead infrastrutturale. \\
+\bottomrule
+\end{tabularx}
+\caption{Sfide delle architetture event-driven}
+\label{tab:eda-sfide}
+\end{table}
+
+\subsection{Apache Kafka come Infrastruttura Event-Driven}
+
+Apache Kafka è la piattaforma di event streaming più diffusa per architetture
+EDA ad alta disponibilità. A differenza di una coda di messaggi tradizionale,
+Kafka è fondamentalmente un \textbf{log distribuito}: un file append-only,
+immutabile e ordinato. Questa scelta progettuale elimina le operazioni più
+costose di un database (letture e scritture casuali), rendendo Kafka
+estremamente veloce e affidabile.
+
+\begin{description}[style=nextline, leftmargin=1.5cm]
+  \item[\textsf{Log Immutabile}]
+    Ogni evento scritto su Kafka viene aggiunto in coda al log e non può essere
+    modificato né cancellato (almeno fino alla scadenza della retention policy).
+    La scrittura è un'operazione $O(1)$; la lettura avviene per offset sequenziale,
+    altrettanto veloce.
+
+  \item[\textsf{Partizioni e Scalabilità}]
+    Un topic non è un singolo file ma viene suddiviso in $N$
+    \textbf{partizioni}, distribuite su più server (\textit{broker}) nel cluster.
+    Ogni partizione è un log ordinato indipendente. Più partizioni consentono a
+    più producer e consumer di operare in parallelo, scalando orizzontalmente
+    il throughput.
+
+  \item[\textsf{Replicazione Leader/Follower}]
+    Per ogni partizione, Kafka mantiene un \textbf{Leader} (che riceve tutte le
+    scritture) e uno o più \textbf{Follower} (che replicano i dati dal Leader).
+    Se il Leader diventa non disponibile, un Follower aggiornato viene eletto
+    automaticamente come nuovo Leader, garantendo \textbf{tolleranza ai guasti}
+    senza perdita di dati.
+
+  \item[\textsf{Consumer Group}]
+    Più istanze dello stesso consumer possono essere raggruppate in un
+    \textbf{consumer group}. Kafka assegna automaticamente le partizioni ai
+    consumer del gruppo: se il topic ha 4~partizioni e il gruppo ha 2~consumer,
+    ciascuno leggerà 2~partizioni. Se un consumer muore, le sue partizioni
+    vengono riassegnate agli altri (\textit{rebalancing}), garantendo
+    parallelismo e resilienza anche in lettura.
+
+  \item[\textsf{Acknowledgments (ACKs)}]
+    Il livello di garanzia sulla consegna è configurabile tramite il parametro
+    \texttt{acks} del producer:
+    \begin{itemize}
+      \item \texttt{acks=0} -- il producer non attende conferma (massima velocità,
+            rischio di perdita).
+      \item \texttt{acks=1} -- il producer attende la conferma del solo Leader
+            (buon compromesso velocità/sicurezza).
+      \item \texttt{acks=all} -- il producer attende la conferma di Leader e tutti
+            i Follower (massima sicurezza, latenza più alta).
+    \end{itemize}
+\end{description}
+
+\subsection{EDA Stateful vs Stateless e il Wrapper Sincrono}
+
+Le architetture event-driven si distinguono anche per la gestione dello stato:
+
+\begin{description}[style=nextline, leftmargin=1.5cm]
+  \item[\textsf{Stateless EDA}]
+    Gli eventi sono autonomi e non correlati tra loro. Ogni evento contiene
+    tutte le informazioni necessarie per essere elaborato indipendentemente
+    (es.\ un evento di telemetria GPS).
+
+  \item[\textsf{Stateful EDA}]
+    Gli eventi sono correlati e il loro significato dipende dalla sequenza o
+    dallo stato accumulato (es.\ una saga di ordine che attraversa gli stati
+    \texttt{Created} $\rightarrow$ \texttt{Paid} $\rightarrow$ \texttt{Shipped}).
+    La gestione dello stato richiede meccanismi come Event Sourcing o proiezioni
+    materializzate.
+\end{description}
+
+Un problema ricorrente è l'interfacciamento con \textbf{client sincroni}
+(es.\ un'applicazione mobile o un browser) che necessitano di una risposta
+immediata, mentre l'EDA è intrinsecamente asincrona. La soluzione è il
+\textbf{Wrapper sincrono}: un componente che (1) riceve la richiesta REST dal
+client, (2) genera un evento asincrono e lo pubblica sul broker, (3) si
+iscrive a un topic di risposta e attende, (4) restituisce la risposta HTTP
+al client quando l'evento di completamento arriva. Questo pattern
+``disintermedia'' la comunicazione sincrona/asincrona senza sacrificare il
+disaccoppiamento interno.
+
+% -----------------------------------------------------------------------------
+\section{DDD, Microservizi e Cloud: la Triade Architetturale}
+% -----------------------------------------------------------------------------
+
+DDD, architetture event-driven e cloud computing formano una triade
+sinergica per la costruzione di sistemi moderni:
+
+\begin{itemize}
+  \item \textbf{Microservizi come scomposizione fisica:} ogni bounded context
+        del DDD diventa un microservizio autonomo, con il proprio database,
+        la propria logica di dominio e il proprio ciclo di deployment.
+
+  \item \textbf{EDA come comunicazione disaccoppiata:} i domain event
+        implementano la comunicazione tra bounded context attraverso un
+        broker (Kafka), eliminando l'accoppiamento sincrono tipico delle
+        architetture REST point-to-point.
+
+  \item \textbf{Cloud come infrastruttura elastica:} ogni microservizio
+        (bounded context) può essere scalato indipendentemente in base al
+        carico. La context map del DDD diventa la mappa delle interazioni
+        tra servizi cloud, e l'Anticorruption Layer protegge il modello di
+        dominio dalle API di servizi esterni.
+\end{itemize}
+
+Questa triade è alla base della pipeline \textit{Intelligent Domain Architect}:
+Agent~1, Agent~2 e Agent~3 sono microservizi indipendenti che comunicano via
+Kafka (EDA), ciascuno con un bounded context ben definito (DDD), containerizzati
+e scalabili tramite Docker Compose (infrastruttura).
+
+% -----------------------------------------------------------------------------
+\section{DDD e Event-Driven nei Sistemi Multi-Agente}
+% -----------------------------------------------------------------------------
+
+La pipeline \textit{Intelligent Domain Architect} rappresenta un caso concreto in
+cui DDD e architetture event-driven si integrano in un sistema multi-agente:
+
+\begin{enumerate}
+  \item \textbf{Il dominio come artefatto centrale.} L'intero flusso ruota attorno
+        a un \textit{domain model} strutturato secondo i principi DDD: bounded
+        context, entità, aggregati, eventi e pattern di comunicazione. Il modello
+        non è un diagramma statico, ma un artefatto vivo che viene analizzato,
+        validato e raffinato iterativamente dagli agenti.
+
+  \item \textbf{Comunicazione event-driven tra agenti.} Gli agenti della pipeline
+        comunicano tramite Apache Kafka: Agent~1 pubblica il domain model sul topic
+        \texttt{agent1-output}, Agent~2 lo consuma, esegue l'analisi e pubblica il
+        risultato su \texttt{agent2-output} per Agent~3. Questo disaccoppiamento
+        consente a ciascun agente di evolvere, scalare e fallire indipendentemente
+        dagli altri.
+
+  \item \textbf{Validazione DDD come quality gate.} Agent~2 formalizza i principi
+        DDD in controlli automatizzati (cfr.\ Capitolo~6). Ogni violazione produce
+        un \textit{issue} tipizzato che viene restituito all'utente con domande
+        contestuali per guidare la correzione.
+
+  \item \textbf{Consistenza eventuale e iterazione.} Come in ogni sistema
+        event-driven, la consistenza del modello non è garantita al primo
+        passaggio. Agent~2 adotta un approccio iterativo: ad ogni ciclo, le
+        risposte dell'utente vengono interpretate dall'LLM e applicate
+        strutturalmente al modello, riducendo progressivamente le issue fino al
+        raggiungimento dello stato \texttt{VALID}.
+\end{enumerate}
+
+\begin{technicalbox}{Dalla Teoria alla Pratica}
+I capitoli successivi mostreranno come ciascun concetto introdotto in questa sezione
+si traduce in componenti concreti del sistema:
+\begin{itemize}
+  \item I \textbf{bounded context} e le \textbf{entità} DDD diventano le strutture
+        dati JSON analizzate dalla pipeline (Capitolo~8).
+  \item Le \textbf{regole DDD} diventano la knowledge base del
+        \texttt{ConflictDetector} (Capitolo~6).
+  \item I \textbf{domain event} diventano i messaggi Kafka tra agenti (Capitolo~7).
+  \item I \textbf{pattern della context map} diventano i controlli di compatibilità
+        nella comunicazione tra bounded context (Capitolo~7).
+\end{itemize}
+\end{technicalbox}
+
+% =============================================================================
+\chapter{Analisi dello Scenario e Business Case}
+% =============================================================================
+
+\section{Razionale del Progetto}
+
+La progettazione di sistemi software complessi richiede la definizione di un \textit{domain
+model} coerente prima di avviare lo sviluppo dei microservizi. Nella pratica, i modelli
+prodotti nella fase di analisi -- anche quando generati automaticamente da Agent~1 --
+contengono regolarmente incoerenze strutturali: entità duplicate tra bounded context,
+requisiti contraddittori, eventi con naming scorretto, pattern di comunicazione
+incompatibili.
+
+Senza un passaggio di validazione formale, questi problemi si propagano fino all'Agent~3,
+che genererebbe specifiche difettose, costose da correggere nelle fasi successive.
+
+\section{Analisi dei Pain Points}
+
+Lo scenario attuale, in assenza di un validatore semantico, presenta criticità strutturali:
+
+\begin{itemize}
+  \item \textbf{Entity Overlap silenzioso:} La stessa entità (es.\ \texttt{Product})
+        compare in più bounded context con significati leggermente diversi, violando
+        il principio di \textit{Single Source of Truth} senza che nessuno strumento
+        convenzionale lo rilevi.
+
+  \item \textbf{Conflitti di Requisiti:} Requisiti funzionali di domini diversi si
+        contraddicono (es.\ ``immutabile dopo la creazione'' vs.\ ``modificabile fino
+        alla spedizione'') generando ambiguità che emergono solo in fase di sviluppo.
+
+  \item \textbf{Violazioni dell'Ubiquitous Language:} Termini come
+        \texttt{CreateOrder} (anziché \texttt{OrderCreated}) o domini di supporto
+        classificati erroneamente come Core distorcono le responsabilità architetturali.
+
+  \item \textbf{Pattern Incompatibili:} Un dominio richiede consistenza forte con
+        comunicazione sincrona, ma l'architettura eventi prevede solo canali asincroni,
+        rendendo il contratto di integrazione irrealizzabile.
+\end{itemize}
+
+\section{Scenario d'Uso Concreto: E-Commerce}
+
+Per illustrare il valore di Agent~2, consideriamo un dominio e-commerce tipico
+in cui Agent~1 ha prodotto un domain model con le seguenti caratteristiche:
+
+\begin{itemize}
+\item 3 domini core: \texttt{OrderManagement}, \texttt{CatalogManagement},
+        \texttt{PaymentManagement}
+  \item 2 domini supporting: \texttt{NotificationService}, \texttt{UserManagement}
+  \item 15 entità distribuite tra i bounded context
+  \item 8 eventi di dominio
+  \item 5 requisiti funzionali per dominio
+\end{itemize}
+
+In questo scenario, Agent~2 tipicamente rileva:
+
+\begin{table}[H]
+\centering
+\small
+\renewcommand{\arraystretch}{1.5}
+\setlength{\tabcolsep}{6pt}
+
+\begin{tabularx}{\textwidth}{
+  >{\raggedright\arraybackslash}p{8.0cm}
+  >{\raggedright\arraybackslash}X
+}
+\toprule
+\textbf{Issue} & \textbf{Descrizione} \\
+\midrule
+
+\texttt{ENTITY\_OVERLAP} \textbf{(HIGH)}
+& \texttt{Product} presente sia in \texttt{OrderContext} sia in \texttt{CatalogContext} \\
+
+\texttt{REQUIREMENT\_CONFLICT} \textbf{(HIGH)}
+& immutabilità dell'ordine vs.\ modificabilità del prodotto \\
+
+\texttt{NAMING\_VIOLATION} \textbf{(MEDIUM)}
+& \texttt{CreateOrder} $\rightarrow$ \texttt{OrderCreated} \\
+
+\texttt{MISCLASSIFIED\_DOMAIN} \textbf{(MEDIUM)}
+& \texttt{UserManagement} classificato come \texttt{Core} invece di \texttt{Generic} \\
+
+\bottomrule
+\end{tabularx}
+\end{table}
+
+
+Il loop n8n guida il business stakeholder attraverso 2 iterazioni: la prima per
+risolvere l'entity overlap e il conflitto di requisiti, la seconda per confermare
+le scelte e raggiungere lo stato \texttt{VALID}.
+
+\section{Scenario d'Uso: Healthcare}
+
+Il dominio sanitario introduce complessità semantiche specifiche che Agent~2
+gestisce tramite la knowledge base estesa:
+
+\begin{itemize}
+  \item \texttt{Patient} appare in \texttt{ClinicalContext} (persona in cura),
+        \texttt{RecordsContext} (titolare della cartella clinica) e
+        \texttt{BillingContext} (soggetto pagante).
+        L'embedding rileva la sovrapposizione con similarità $>0.85$.
+  \item Il termine \texttt{Visita} ha significati diversi: in
+        \texttt{ClinicalContext} indica l'appuntamento del paziente con il
+        medico, mentre in \texttt{RecordsContext} indica il referto prodotto
+        a seguito del consulto, generando \texttt{SEMANTIC\_AMBIGUITY}.
+  \item Il file di test \texttt{case\_healthcare.json} in \texttt{input\_agent/}
+        contiene questi 4 issue precostituiti per la verifica del sistema.
+\end{itemize}
+\section{Rischi e Impatto Organizzativo}
+
+Il mancato rilevamento di questi problemi nella fase di modellazione eleva
+significativamente il costo del ciclo di sviluppo. Agent~2 mitiga tali rischi
+attraverso un processo di validazione iterativa che coinvolge attivamente il business
+stakeholder, garantendo che ogni modifica al domain model sia tracciabile, motivata
+e approvata prima di procedere alla specifica dei microservizi.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}l >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Rischio} & \textbf{Senza Agent~2} & \textbf{Con Agent~2} \\
+\midrule
+Entity Overlap & Silenzioso fino all'implementazione & Rilevato e risolto prima di Agent~3 \\
+Conflitti di requisiti & Scoperto durante lo sviluppo & Segnalato con domande contestuali \\
+Naming violations & Propagate alle API generate & Auto-corrette dallo Step~4 \\
+Decisioni non tracciate & Persa la storia delle scelte & Audit trail nei metadati del modello \\
+\bottomrule
+\end{tabularx}
+\caption{Confronto rischi con e senza Agent~2}
+\label{tab:risk-comparison}
+\end{table}
+
+% =============================================================================
+\chapter{Obiettivi e Requisiti del Sistema}
+% =============================================================================
+
+\section{Obiettivi Strategici}
+
+Agent~2 opera come microservizio autonomo di \textbf{Domain Model Governance}.
+Gli obiettivi si articolano in:
+
+\begin{itemize}
+  \item \textbf{Validazione Semantica Automatizzata:} Rilevamento sistematico di tutte le
+        categorie di incoerenza DDD prima che il modello raggiunga Agent~3.
+
+  \item \textbf{Raffinamento Guidato dal Contesto:} Generazione di domande specifiche per
+        nome di entità e bounded context, con risposte suggerite azionabili,
+        che guidano il stakeholder verso decisioni concrete.
+
+  \item \textbf{Convergenza Garantita:} Il loop iterativo con limite adattivo assicura
+        che il sistema non si blocchi prematuramente, proseguendo fino al raggiungimento
+        dello stato \texttt{VALID}.
+
+  \item \textbf{Interoperabilità A2A:} Conformità al protocollo A2A v0.3 per la
+        comunicazione strutturata con Agent~1 e Agent~3 nella pipeline.
+\end{itemize}
+
+\section{Requisiti Funzionali}
+
+\begin{enumerate}
+  \item \textbf{Pipeline di Analisi in 5 Step:} Ogni chiamata a \texttt{POST /analyze}
+        esegue sequenzialmente: pre-applicazione risposte, analisi semantica,
+        conflict detection, generazione domande, raffinamento modello.
+
+  \item \textbf{Rilevamento Multi-Categoria:} Il sistema deve identificare almeno
+        7 tipologie di issue: \texttt{ENTITY\_OVERLAP}, \texttt{SEMANTIC\_AMBIGUITY},
+        \texttt{REQUIREMENT\_CONFLICT}, \texttt{DUPLICATE\_EVENT},
+        \texttt{NAMING\_VIOLATION}, \texttt{INCOMPATIBLE\_PATTERN},
+        \texttt{MISCLASSIFIED\_DOMAIN}.
+
+  \item \textbf{LLM-first con Fallback:} La generazione delle domande utilizza
+        Qwen2.5~14B come approccio primario; in caso di timeout o JSON malformato,
+        attiva automaticamente i template dalla \texttt{validation\_checklist.json}.
+
+  \item \textbf{Filtraggio Intelligente:} Gli issue relativi ad elementi già risolti
+        nelle iterazioni precedenti (\texttt{\_userGuidedFixes},
+        \texttt{\_ownershipDecisions}) vengono filtrati per non riproporre
+        problemi già trattati.
+
+  \item \textbf{Stima Adattiva delle Iterazioni:} Il campo
+        \texttt{suggested\_max\_iterations} viene ricalcolato a ogni iterazione
+        tramite LLM (con fallback euristico) per adattare dinamicamente il limite
+        del loop n8n.
+
+  \item \textbf{Doppia Modalità Operativa:} Supporto alla modalità REST interattiva
+        (via n8n) e alla modalità Kafka consumer asincrona per la pipeline automatica
+        Agent~1 $\rightarrow$ Agent~2 $\rightarrow$ Agent~3.
+\end{enumerate}
+
+\section{Requisiti Non Funzionali}
+
+\begin{itemize}
+  \item \textbf{Performance:} La pipeline completa con LLM deve completarsi entro
+        180~secondi per timeout; la modalità \texttt{use\_llm=false} garantisce
+        risposte in pochi secondi per scenari batch.
+
+  \item \textbf{Scalabilità:} Il servizio Kafka consumer supporta scaling orizzontale
+        tramite la variabile \texttt{CONSUMER\_REPLICAS} in docker-compose, con
+        processamento parallelo fino a \texttt{MAX\_WORKERS=4} thread per replica.
+
+  \item \textbf{Portabilità:} Containerizzazione completa tramite Docker Compose
+        multi-file per isolamento delle dipendenze e replicabilità dell'ambiente.
+
+  \item \textbf{Resilienza AI:} Fallback automatico da LLM a modalità euristica/template
+        in caso di indisponibilità di Ollama, garantendo la continuità del servizio.
+
+  \item \textbf{Interoperabilità:} Conformità allo standard A2A Protocol v0.3
+        con Agent Card pubblicata su \texttt{/.well-known/agent.json}.
+\end{itemize}
+
+\section{Casi d'Uso Principali}
+
+\subsection{UC-001: Analisi Iniziale di un Domain Model}
+
+\textbf{Attore:} Business Stakeholder tramite n8n \\
+\textbf{Pre-condizione:} Docker stack avviato, Ollama con Qwen2.5~14B disponibile \\
+\textbf{Flusso:}
+\begin{enumerate}
+  \item L'utente apre \texttt{http://127.0.0.1:5678/webhook/agent2-start} nel browser.
+  \item Seleziona la modalità di input (file predefinito o upload) e il domain model.
+  \item n8n invia il modello a \texttt{POST /analyze} con \texttt{use\_llm=true}.
+  \item Agent~2 esegue i 4 step di analisi e restituisce issue e domande.
+  \item n8n renderizza le domande come form HTML con radio buttons.
+  \item L'utente risponde e il ciclo riparte dalla chiamata successiva a \texttt{/analyze}.
+  \item Quando \texttt{status=VALID}, n8n mostra la pagina di successo con il modello raffinato.
+\end{enumerate}
+
+\subsection{UC-002: Analisi Batch via Kafka (Predisposta)}
+
+\textbf{Attore:} Agent~1 (automatico, nessuna interazione umana) \\
+\textbf{Pre-condizione:} Stack Kafka avviato con \texttt{docker-compose.kafka.yml} \\
+\textbf{Flusso:}
+\begin{enumerate}
+  \item Agent~1 pubblica il domain model su topic \texttt{agent1-output}.
+  \item \texttt{agent2-consumer} consuma il messaggio dal topic.
+  \item Esegue la pipeline di analisi completa (modalità non interattiva, \texttt{use\_llm=true}).
+  \item Pubblica il modello validato e raffinato su topic \texttt{agent2-output}.
+  \item Agent~3 consuma il risultato e avvia la generazione delle specifiche.
+\end{enumerate}
+
+\subsection{UC-003: Debug e Test Diretto API}
+
+\textbf{Attore:} Team DevOps o sviluppatore \\
+\textbf{Pre-condizione:} Agent~2 API avviata \\
+\textbf{Flusso:}
+\begin{enumerate}
+  \item Accede a \texttt{http://localhost:8002/docs} (Swagger UI).
+  \item Seleziona un file di test predefinito tramite \texttt{GET /source/files}.
+  \item Invia l'analisi con \texttt{POST /source/analyze-by-file?filename=example\_bad.json}.
+  \item Verifica il risultato JSON con gli issue attesi per lo stress test completo.
+  \item Consulta i log tramite \texttt{docker logs agent2-api} per la diagnostica.
+\end{enumerate}
+
+\section{Requisiti di Sistema}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Componente} & \textbf{Minimo} & \textbf{Raccomandato} \\
+\midrule
+RAM sistema & 4 GB liberi & 8 GB (con Kafka: 12 GB) \\
+CPU & 2 core & 4+ core \\
+GPU NVIDIA & Non richiesta (CPU mode) & RTX 4070 / 8 GB VRAM \\
+Storage & 10 GB & 20 GB (modelli LLM inclusi) \\
+OS & Linux / macOS / Windows 10+ & Windows 11 con WSL2 o Linux \\
+Docker & 24.0+ & Ultima versione stabile \\
+Ollama & 0.3+ & 0.5+ con modello qwen2.5:14b \\
+\bottomrule
+\end{tabular}
+\caption{Requisiti hardware e software di sistema}
+\label{tab:system-requirements}
+\end{table}
+
+% =============================================================================
+\chapter{Stakeholder e Ruoli}
+% =============================================================================
+
+Il presente capitolo identifica gli attori che interagiscono con Agent~2,
+sia come utenti umani che come sistemi della pipeline.
+
+\section{Business Stakeholder (Utente Interattivo)}
+
+\textbf{Ruolo:} Architetto software, domain expert o product owner che partecipa
+attivamente al ciclo di raffinamento del modello tramite l'interfaccia n8n.
+
+\textbf{Responsabilità:} Rispondere alle domande contestuali generate dall'agente,
+scegliere tra le risposte suggerite o fornire input libero, validare il modello
+raffinato prima dell'inoltro ad Agent~3.
+
+\begin{technicalbox}{Dettaglio Tecnico: Interazione via n8n}
+Il workflow \texttt{workflow\_complete\_loop.json} presenta all'utente un form HTML
+dinamico con radio buttons per le risposte suggerite e campo testo libero.
+Le risposte vengono inviate via \texttt{POST /webhook/agent2-submit} e passate
+all'iterazione successiva come \texttt{previous\_answers}.
+\end{technicalbox}
+
+\section{Agent 1 -- Domain Interviewer (Upstream)}
+
+\textbf{Ruolo:} Produttore del domain model JSON che alimenta Agent~2.
+
+\textbf{Responsabilità:} Costruire un domain model strutturato tramite intervista
+al business stakeholder e pubblicarlo sul topic Kafka \texttt{agent1-output}
+oppure inviarlo direttamente via \texttt{POST /a2a/message/send}.
+
+\begin{technicalbox}{Dettaglio Tecnico: Integrazione A2A e Kafka}
+In modalità REST, Agent~1 invia il modello tramite il protocollo A2A v0.3:
+\texttt{POST /a2a/message/send} con un \texttt{Part} contenente il JSON del
+domain model. In modalità Kafka (futura), pubblica il messaggio sul topic
+\texttt{agent1-output}; l'\texttt{agent2-consumer} lo consuma automaticamente.
+\end{technicalbox}
+
+\section{Agent 3 -- Specification Generator (Downstream)}
+
+\textbf{Ruolo:} Consumatore del domain model validato e raffinato prodotto da Agent~2.
+
+\textbf{Responsabilità:} Ricevere il \texttt{refined\_model} in stato \texttt{VALID}
+e generare le specifiche tecniche dei microservizi.
+
+\begin{technicalbox}{Dettaglio Tecnico: Output verso Agent 3}
+Il modello raffinato viene salvato su \texttt{output\_agent/\{filename\}/\{session\_id\}/iteration\_\{N\}.json}
+e, nella modalità Kafka futura, pubblicato sul topic \texttt{agent2-output}.
+Agent~3 consuma questo topic per avviare la fase di specifica.
+\end{technicalbox}
+
+\section{Operatore n8n (Workflow Engineer)}
+
+\textbf{Ruolo:} Responsabile della configurazione e manutenzione del workflow n8n.
+
+\textbf{Responsabilità:} Importare e attivare i workflow dalla directory \texttt{n8n/},
+configurare gli URL degli endpoint (\texttt{http://agent2-api:8002}), monitorare
+il loop interattivo e aggiornare i workflow in caso di evoluzioni dell'API.
+
+\section{Team Tecnico e DevOps}
+
+\textbf{Ruolo:} Sviluppatori e sistemisti incaricati della manutenzione evolutiva
+del microservizio.
+
+\textbf{Responsabilità:} Gestione del ciclo di vita Docker, aggiornamento dei
+modelli LLM in Ollama, evoluzione della knowledge base DDD, integrazione Kafka
+per la pipeline automatica.
+
+\begin{technicalbox}{Dettaglio Tecnico: Infrastruttura Docker}
+Lo stack Docker è descritto in dettaglio nel Capitolo~10 (Deployment e Operatività).
+In sintesi: \texttt{docker-compose.yml} avvia i 2 container core,
+\texttt{docker-compose.kafka.yml} aggiunge i 4 container per la pipeline Kafka.
+\end{technicalbox}
+
+\section{Matrice di Tracciabilità Endpoint/Attore}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Attore} & \textbf{/analyze} & \textbf{/a2a/*} & \textbf{/source/*} & \textbf{/health} \\
+\midrule
+Business Stakeholder (n8n) & Sì & No  & Sì  & No  \\
+Agent 1 (A2A)              & No & Sì  & No  & No  \\
+Agent 3 (Kafka)            & No & No  & No  & No  \\
+DevOps / Debug             & Sì & Sì  & Sì  & Sì  \\
+\bottomrule
+\end{tabular}
+\caption{Matrice di tracciabilità Attori/Endpoint}
+\label{tab:matrix-endpoints}
+\end{table}
+
+% =============================================================================
+\chapter{Architettura del Sistema}
+% =============================================================================
+
+\section{Visione d'Insieme}
+
+Agent~2 non è un singolo servizio monolitico, ma un sistema modulare in cui
+ogni componente ha una responsabilità precisa nella pipeline di validazione:
+
+\begin{itemize}
+  \item \textbf{Il Cuore (agent2-api):} Backend FastAPI che espone 12 endpoint,
+        inizializza i 4 servizi di analisi all'avvio e orchestra la pipeline
+        in 5 step ad ogni chiamata \texttt{/analyze}.
+
+  \item \textbf{L'Orchestratore (n8n):} Gestisce il loop interattivo utente,
+        presentando le domande generate dall'agente via form HTML e reinviando
+        le risposte all'iterazione successiva tramite webhook.
+
+  \item \textbf{Il Motore AI (Ollama -- host):} Esegue Qwen2.5~14B con accesso
+        diretto alla GPU NVIDIA RTX~4070. Non è containerizzato per garantire
+        le massime prestazioni; i container lo raggiungono via
+        \texttt{host.docker.internal:11434}.
+
+  \item \textbf{Il Consumer Asincrono (agent2-consumer -- futuro):} Modalità
+        batch per la pipeline automatica Agent~1 $\rightarrow$ Agent~2
+        $\rightarrow$ Agent~3 via Kafka, scalabile a $N$ repliche.
+
+  \item \textbf{Il Bus Eventi (Kafka -- futuro):} Message broker per la
+        comunicazione A2A asincrona; topic \texttt{agent1-output} (input) e
+        \texttt{agent2-output} (output verso Agent~3).
+\end{itemize}
+
+\section{Diagramma Architetturale}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=1.4cm and 2.5cm,
+  box/.style={draw=agentblue!70, fill=agentblue!8, rounded corners=4pt,
+    minimum width=3.8cm, minimum height=1.4cm, align=center,
+    font=\small\sffamily},
+  mainbox/.style={draw=agentblue, fill=agentblue!15, rounded corners=4pt,
+    minimum width=3.8cm, minimum height=1.4cm, align=center,
+    font=\small\sffamily\bfseries, line width=1.2pt},
+  futurebox/.style={draw=darkgray!50, fill=lightgray, rounded corners=4pt,
+    minimum width=3.8cm, minimum height=1.4cm, align=center,
+    font=\small\sffamily, dashed},
+  arrow/.style={->, >=stealth, thick, color=agentblue!70},
+  dashedarrow/.style={->, >=stealth, thick, color=darkgray!60, dashed},
+  label/.style={font=\scriptsize\sffamily, color=darkgray}
+]
+  % Nodes
+  \node[box] (agent1) {Agent 1\\[-2pt]\scriptsize Domain Interview};
+  \node[box, right=of agent1] (n8n) {n8n\\[-2pt]\scriptsize :5678 (UI)};
+  \node[futurebox, below=of agent1] (kafka1) {Kafka: agent1-output\\[-2pt]\scriptsize (futura)};
+  \node[mainbox, below=of n8n] (api) {agent2-api\\[-2pt]\scriptsize :8002};
+  \node[box, below=of api] (ollama) {Ollama (host)\\[-2pt]\scriptsize qwen2.5:14b -- :11434};
+  \node[futurebox, below=of ollama] (kafka2) {Kafka: agent2-output\\[-2pt]\scriptsize (futura)};
+  \node[box, right=1.5cm of kafka2] (agent3) {Agent 3\\[-2pt]\scriptsize Spec Generator};
+
+  % Arrows
+  \draw[arrow] (agent1) -- node[label, left] {domain\_model JSON} (kafka1);
+  \draw[dashedarrow] (kafka1) -- (api);
+  \draw[arrow] (n8n) -- node[label, right] {HTTP POST /analyze} (api);
+  \draw[arrow] (api) -- (ollama);
+  \draw[dashedarrow] (ollama) -- (kafka2);
+  \draw[dashedarrow] (kafka2) -- (agent3);
+\end{tikzpicture}
+\caption{Architettura della pipeline Intelligent Domain Architect con Agent~2 al centro}
+\label{fig:arch-overview}
+\end{figure}
+
+\section{Topologia Docker}
+
+\subsection{Flusso REST (Modalità Default)}
+
+Il file \texttt{docker-compose.yml} avvia 2 container sulla rete bridge
+\texttt{agent2-network} (subnet \texttt{172.28.0.0/16}):
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{llp{7cm}}
+\toprule
+\textbf{Servizio} & \textbf{Porta} & \textbf{Funzione} \\
+\midrule
+\textbf{agent2-api} & 8002 & Backend FastAPI: 12 endpoint, orchestrazione pipeline 5-step, A2A Protocol v0.3. Build da \texttt{Dockerfile} locale. Limiti: 2 CPU, 2 GB RAM. \\
+\textbf{n8n} & 5678 & Orchestratore workflow interattivo. Gestisce il loop ricorsivo (scelta file $\rightarrow$ analisi $\rightarrow$ form domande $\rightarrow$ reinvio risposte $\rightarrow$ ri-analisi fino a VALID). \\
+\bottomrule
+\end{tabular}
+\caption{Servizi core -- docker-compose.yml}
+\label{tab:core-services}
+\end{table}
+
+\subsection{Flusso Kafka (Predisposto)}
+
+Il file \texttt{docker-compose.kafka.yml} aggiunge 4 container aggiuntivi:
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{llp{6.5cm}}
+\toprule
+\textbf{Servizio} & \textbf{Porta} & \textbf{Funzione} \\
+\midrule
+\textbf{zookeeper} & 2181 (interna) & Coordinamento broker Kafka (leader election, metadata topic). \\
+\textbf{kafka} & 9092/9093 & Message broker A2A. Topic: \texttt{agent1-output} (in), \texttt{agent2-output} (out). 4 partizioni, retention 7 giorni. \\
+\textbf{agent2-consumer} & -- & Consumer parallelo da \texttt{agent1-output}. Stessa immagine di agent2-api con entry point dedicato al consumo asincrono. Scalabile via \texttt{CONSUMER\_REPLICAS}. Limiti: 4 CPU, 4 GB RAM. \\
+\textbf{kafka-ui} & 8080 & Dashboard web per ispezionare topic, messaggi e consumer groups. \\
+\bottomrule
+\end{tabular}
+\caption{Servizi Kafka -- docker-compose.kafka.yml (predisposto)}
+\label{tab:kafka-services}
+\end{table}
+
+\section{I Pilastri del Progetto}
+
+\textbf{Separazione delle Responsabilità (SoC):} Ogni fase della pipeline (analisi
+semantica, conflict detection, generazione domande, raffinamento) è implementata
+in un servizio dedicato. Un fallimento nel modulo LLM non interrompe
+l'analisi basata su regole.
+
+\textbf{LLM come Prima Scelta, Euristica come Fallback:} Il sistema prova sempre
+l'approccio LLM (Qwen2.5~14B via Ollama) per ottenere la massima qualità.
+In caso di timeout, errore o JSON malformato, il fallback garantisce la
+continuità del servizio senza intervento umano.
+
+\textbf{Filtraggio Incrementale degli Issue:} Il sistema mantiene memoria delle
+decisioni dell'utente nelle iterazioni precedenti (\texttt{\_userGuidedFixes},
+\texttt{\_ownershipDecisions}) per non riproporre problemi già risolti.
+
+\textbf{Immagine Docker Unica, Due Entry Point:} \texttt{agent2-api} e
+\texttt{agent2-consumer} usano la stessa immagine \texttt{agent2-consistency-analyzer:latest},
+garantendo parità di comportamento tra modalità REST e Kafka.
+
+\section{Architettura dei Servizi Interni}
+
+Il backend di Agent~2 è composto da quattro servizi indipendenti, inizializzati
+all'avvio dell'applicazione e iniettati come dipendenze agli endpoint.
+Ogni servizio è responsabile di una singola fase della pipeline.
+
+\subsection{SemanticAnalyzer}
+
+Il \texttt{SemanticAnalyzer} è il primo stadio della pipeline e opera interamente
+senza LLM, basandosi su calcolo vettoriale puro.
+
+\textbf{Inizializzazione:} Al primo avvio, scarica e carica il modello
+\texttt{all-MiniLM-L6-v2} da HuggingFace nella directory \texttt{./models}.
+Questo avviene una sola volta; i successivi avvii usano la cache locale.
+Il modello produce embedding a \textbf{384 dimensioni}.
+
+\textbf{Algoritmo di rilevamento ENTITY\_OVERLAP:}
+\begin{enumerate}
+  \item Estrae tutte le entità da ogni bounded context del \texttt{domainMap}.
+  \item Calcola l'embedding di ogni nome di entità.
+  \item Calcola la \textit{cosine similarity} tra ogni coppia di entità
+        appartenenti a bounded context diversi.
+  \item Se la similarità supera \texttt{ENTITY\_OVERLAP\_THRESHOLD} (default: 0.85),
+        genera un issue di tipo \texttt{ENTITY\_OVERLAP} con i due contesti
+        coinvolti e il punteggio di similarità.
+\end{enumerate}
+
+\textbf{Algoritmo di rilevamento SEMANTIC\_AMBIGUITY:}
+\begin{enumerate}
+  \item All'interno dello stesso bounded context, confronta entità con
+        definizioni presenti nell'\texttt{ubiquitousLanguage}.
+  \item Se due definizioni hanno similarità superiore a
+        \texttt{SEMANTIC\_SIMILARITY\_THRESHOLD} (default: 0.75) pur riferendosi
+        a concetti che dovrebbero essere distinti, genera un issue
+        \texttt{SEMANTIC\_AMBIGUITY}.
+\end{enumerate}
+
+\begin{technicalbox}{Dettaglio Tecnico: Filtraggio Pre-Analisi}
+Prima di calcolare gli embedding, il servizio esclude automaticamente:
+\begin{itemize}
+  \item Entità con flag \texttt{\_referenceOnly: true} (già risolte dallo Step~0)
+  \item Issue i cui \texttt{affected\_elements} compaiono già in
+        \texttt{\_userGuidedFixes} o \texttt{\_ownershipDecisions} nel modello
+\end{itemize}
+Questo filtraggio garantisce che le iterazioni successive analizzino solo
+i problemi ancora aperti, evitando di riproporre questioni già risolte
+dall'utente nelle iterazioni precedenti.
+\end{technicalbox}
+
+\subsection{ConflictDetector}
+
+Il \texttt{ConflictDetector} implementa un approccio ibrido: prima applica
+22 regole DDD deterministiche, poi usa l'LLM per approfondire i casi ambigui.
+
+\textbf{Fase 1 -- Regole DDD:} Ogni regola della \texttt{validation\_checklist.json}
+viene verificata strutturalmente sul modello. Esempio: la regola EA-001
+(``ogni evento deve avere un solo emitter'') scorre tutti gli eventi e verifica
+che il campo \texttt{emitter} sia unico; se un evento appare in più domini
+come emitter, genera \texttt{DUPLICATE\_EVENT}.
+
+\textbf{Fase 2 -- Analisi LLM:} Il servizio costruisce un prompt che include
+le 22 regole DDD come contesto (da \texttt{ddd\_rules.md}) e la rappresentazione
+JSON del modello, chiedendo a Qwen2.5~14B di identificare conflitti non
+catturati dalle regole formali. La risposta viene parsata e convertita in
+\texttt{ConflictIssue}.
+
+\begin{technicalbox}{Dettaglio Tecnico: Categorie Knowledge Base}
+Le 7 categorie di regole nella \texttt{validation\_checklist.json}:
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Codice & Categoria & N. regole \\
+\midrule
+DC  & Domain Classification        & 3 \\
+BC  & Bounded Context              & 3 \\
+EVO & Entity vs Value Object       & 3 \\
+EO  & Entity Ownership             & 3 \\
+RC  & Requirement Consistency      & 3 \\
+EA  & Event Architecture           & 4 \\
+CP  & Communication Patterns       & 3 \\
+\midrule
+    & \textbf{Totale}              & \textbf{22} \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{technicalbox}
+
+\subsection{QuestionGenerator}
+
+Il \texttt{QuestionGenerator} traduce gli issue tecnici rilevati in domande
+comprensibili per il business stakeholder, con risposte suggerite azionabili.
+
+\textbf{Approccio LLM-first (v2.0):} Tutti gli issue vengono inviati in una
+singola chiamata a Qwen2.5~14B, che genera domande specifiche usando i nomi reali
+delle entità del modello. Il numero massimo di domande è configurabile tramite
+\texttt{MAX\_FOLLOW\_UP\_QUESTIONS} (default: 5).
+
+\textbf{Struttura di ogni domanda generata:}
+\begin{itemize}
+  \item \texttt{question\_id}: Identificativo univoco (es. \texttt{FUQ-001})
+  \item \texttt{question}: Testo della domanda con nomi reali di entità e contesti
+  \item \texttt{severity}: Livello di urgenza (\texttt{HIGH}/\texttt{MEDIUM}/\texttt{LOW})
+  \item \texttt{related\_issue\_type}: Tipo di issue DDD correlato
+  \item \texttt{affected\_elements}: Lista di entità/contesti coinvolti
+  \item \texttt{suggested\_answers}: 2--3 risposte suggerite azionabili
+\end{itemize}
+
+\textbf{Fallback Template:} Se il LLM non è disponibile, il servizio usa i
+\texttt{question\_template} presenti in ogni regola della
+\texttt{validation\_checklist.json}, sostituendo i placeholder con i nomi
+reali delle entità coinvolte.
+
+\subsection{ModelRefiner}
+\label{sec:model-refiner-detail}
+
+Il \texttt{ModelRefiner} è il servizio più complesso: gestisce sia gli auto-fix
+deterministici che l'interpretazione LLM delle risposte utente.
+
+\textbf{Auto-fix deterministici:} Per \texttt{NAMING\_VIOLATION}, il refiner
+converte automaticamente i nomi degli eventi dal formato imperativo al passato
+(es. \texttt{CreateOrder} $\rightarrow$ \texttt{OrderCreated}) senza richiedere
+conferma utente.
+
+\textbf{Interpretazione delle risposte (catena a 3 livelli):} Quando l'utente
+risponde alle domande di follow-up, ogni risposta attraversa una catena di
+interpretazione progressiva:
+\begin{enumerate}
+  \item \textbf{LLM (prioritario):} La risposta viene inviata al modello LLM
+        con il contesto dell'issue correlato. Il modello restituisce una delle
+        6 azioni strutturate (\texttt{rename\_event}, \texttt{set\_owner}, ecc.)
+        con i parametri specifici. Se il LLM restituisce \texttt{no\_change},
+        il sistema riprova fino a 3 tentativi.
+  \item \textbf{Rule-based fallback:} Se il LLM non è disponibile o fallisce,
+        il sistema tenta un matching basato su regole: prima confronta la risposta
+        con le \texttt{suggested\_answers} generate (fuzzy matching), poi applica
+        pattern matching specifici per tipo di issue (es. regex per estrarre nomi
+        di contesto da risposte \texttt{ENTITY\_OVERLAP}, o accettazione diretta
+        per \texttt{SEMANTIC\_AMBIGUITY}).
+  \item \textbf{Catch-all:} Se entrambi i livelli precedenti falliscono e l'utente
+        ha fornito una risposta non vuota, il sistema registra una risoluzione
+        generica (\texttt{resolve\_conflict}) per evitare loop infiniti di
+        re-ask della stessa domanda.
+\end{enumerate}
+Ogni interpretazione viene tracciata con il campo \texttt{interpretation\_source}
+(\texttt{llm}, \texttt{rules} o \texttt{catch-all}) e lo stato \texttt{applied}
+(booleano onesto: \texttt{true} solo se la modifica strutturale è stata effettivamente
+applicata al modello).
+
+\textbf{Annotazioni nel modello:} Le modifiche vengono tracciate nei metadati
+del modello:
+\begin{itemize}
+  \item \texttt{\_userGuidedFixes}: storia delle risoluzioni manuali per ownership
+  \item \texttt{\_ownershipDecisions}: assegnazioni di ownership approvate dall'utente
+  \item \texttt{\_conflictResolutions}: conflitti esplicitamente risolti
+  \item \texttt{\_validationAnnotations}: annotazioni dell'ultima iterazione
+        (rimosse all'inizio della successiva dallo Step~0)
+\end{itemize}
+
+\section{Perché Queste Tecnologie?}
+\begin{technicalbox}{Dettaglio Tecnico: Stack Tecnologico}
+\textbf{FastAPI:} Framework REST asincrono con generazione automatica di
+documentazione OpenAPI/Swagger e validazione degli schemi. Ideale per gestire
+payload JSON complessi e variabili.
+
+\textbf{Qwen2.5~14B (Ollama):} $\sim$9 GB in formato Q4\_K\_M, inferenza in VRAM
+su RTX~4070. Eccellente nella generazione di JSON strutturato e nel ragionamento
+multi-step, con prestazioni superiori a modelli da 7B su task di analisi e classificazione.
+
+\textbf{all-MiniLM-L6-v2:} Modello sentence-transformers (23M parametri) con
+embedding a 384 dimensioni, ottimizzato per rilevare sovrapposizioni semantiche
+tra entità DDD.
+
+\textbf{Kafka (Confluent 7.5.0):} Standard de facto per pipeline event-driven
+A2A. 4 partizioni per topic garantiscono parallelismo; retention 7 giorni
+permette replay in caso di fallimenti downstream.
+
+\textbf{n8n:} Workflow engine low-code per gestire il loop interattivo tramite
+webhook e form HTML, senza necessità di un frontend dedicato.
+\end{technicalbox}
+
+% =============================================================================
+\chapter{Flussi di Funzionamento}
+% =============================================================================
+
+\section{Pipeline di Analisi -- Visione d'Insieme}
+
+Ogni chiamata a \texttt{POST /analyze} esegue fino a 5 step in sequenza.
+Se sono presenti risposte utente da un'iterazione precedente
+(\texttt{previous\_answers}), viene eseguito prima lo \textbf{Step 0}.
+
+\subsection{Step 0 -- Pre-applicazione Risposte (sole iterazioni successive)}
+
+Quando \texttt{/analyze} viene chiamato con \texttt{previous\_answers}
+(dalla seconda iterazione in poi nel loop n8n), le risposte dell'utente
+vengono \textbf{applicate al domain model PRIMA} di eseguire l'analisi.
+
+\begin{technicalbox}{Dettaglio Tecnico: Perché Prima dell'Analisi}
+Applicare le risposte \textit{dopo} l'analisi (come nella v1.x) comportava
+che i problemi già risolti dall'utente venissero rilevati nuovamente,
+rendendo il loop inutile. Con lo Step 0, il modello parte da uno stato
+aggiornato e l'analisi rileva solo i problemi ancora aperti.
+
+\textbf{Operazioni di Step 0:}
+\begin{itemize}
+  \item Recupera \texttt{\_followUpQuestions} memorizzate nel modello
+        dall'iterazione precedente.
+  \item Invoca il servizio ModelRefiner per
+        interpretare ogni risposta via LLM e applicare le modifiche concrete
+        (\texttt{rename\_event}, \texttt{set\_owner}, \texttt{reclassify\_domain},
+        \texttt{resolve\_conflict}, \texttt{add\_mapping}, \texttt{update\_pattern}).
+  \item Rimuove i metadati dell'iterazione precedente
+        (\texttt{\_validationAnnotations}, \texttt{\_followUpQuestions})
+        per partire puliti; conserva \texttt{\_userGuidedFixes} e
+        \texttt{\_ownershipDecisions} per il filtraggio degli issue futuri.
+\end{itemize}
+\end{technicalbox}
+
+\subsection{Step 1 -- Analisi Semantica (Embeddings)}
+
+\textbf{Servizio:} SemanticAnalyzer
+
+Usa il modello \texttt{all-MiniLM-L6-v2} (sentence-transformers) per calcolare
+la similarità coseno tra entità di bounded context diversi.
+
+\textbf{Rileva:}
+\begin{itemize}
+  \item \texttt{ENTITY\_OVERLAP} -- stessa entità in più bounded context
+        senza differenziazione (\textit{threshold}: 0.85)
+  \item \texttt{SEMANTIC\_AMBIGUITY} -- termini con significati diversi
+        nello stesso contesto (\textit{threshold}: 0.75)
+\end{itemize}
+
+\begin{technicalbox}{Dettaglio Tecnico: Filtraggio Intelligente}
+Le entità marcate \texttt{\_referenceOnly} (già assegnate a un owner dallo Step 0)
+vengono escluse dall'analisi. Gli issue i cui \texttt{affected\_elements}
+sono già presenti in \texttt{\_userGuidedFixes} o \texttt{\_ownershipDecisions}
+vengono scartati automaticamente, evitando di riproporre problemi già risolti.
+\end{technicalbox}
+
+\subsection{Step 2 -- Conflict Detection (Regole + LLM)}
+
+\textbf{Servizio:} ConflictDetector
+
+Applica 22 regole DDD dalla knowledge base (\texttt{ddd\_rules.md}) suddivise
+in 7 categorie, con analisi LLM aggiuntiva per i casi complessi.
+
+\textbf{Rileva:}
+\begin{itemize}
+  \item \texttt{REQUIREMENT\_CONFLICT} -- requisiti che si contraddicono
+  \item \texttt{DUPLICATE\_EVENT} -- stesso evento emesso da più domini
+  \item \texttt{NAMING\_VIOLATION} -- eventi non al tempo passato
+        (es.\ \texttt{CreateOrder} anziché \texttt{OrderCreated})
+  \item \texttt{INCOMPATIBLE\_PATTERN} -- pattern sincrono richiesto su
+        canale solo asincrono
+  \item \texttt{MISCLASSIFIED\_DOMAIN} -- dominio Core classificato
+        erroneamente come Generic/Supporting
+\end{itemize}
+
+\begin{technicalbox}{Dettaglio Tecnico: Parametri LLM per Servizio}
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Servizio & Temperature & Max tokens & Timeout \\
+\midrule
+Conflict Detector & 0.3 & 2048 & 120s \\
+Question Generator & 0.4 & 4096 & 120s \\
+Model Refiner & 0.2 & 2048 & 120s \\
+\bottomrule
+\end{tabular}
+\end{center}
+Temperature bassa nel refiner (0.2) per massimo determinismo nelle
+modifiche al modello; più alta nel generator (0.4) per domande contestualmente
+variate.
+\end{technicalbox}
+
+\subsection{Step 3 -- Generazione Domande (LLM-first)}
+
+\textbf{Servizio:} QuestionGenerator
+
+Approccio \textbf{LLM-first} (v2.0): quando \texttt{use\_llm=true},
+\textbf{tutte} le domande vengono generate da Qwen2.5~14B in una singola chiamata.
+Il modello riceve tutti gli issue rilevati e produce domande specifiche con
+nomi reali delle entità e risposte suggerite azionabili.
+
+\textbf{Esempio di output LLM:} Il sistema genera una domanda contestuale
+come \textit{``Come gestire l'ownership di Product tra CatalogContext
+e OrderContext?''}, accompagnata da 2--3 risposte suggerite azionabili
+(es.\ assegnare ownership a un contesto specifico, rinominare le entità
+per distinguere i ruoli, o consolidare in un unico bounded context).
+
+\textbf{Fallback:} se il LLM fallisce (timeout, JSON malformato), usa i
+\texttt{question\_template} dalla \texttt{validation\_checklist.json}.
+
+\subsection{Step 4 -- Raffinamento Modello}
+
+\textbf{Servizio:} ModelRefiner
+
+Auto-fix per problemi semplici (naming violations $\rightarrow$ conversione al passato).
+Nelle iterazioni successive, interpreta le risposte utente e applica modifiche
+strutturali al modello:
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{c @{\hspace{1cm}} p{10cm}}
+\toprule
+\textbf{Azione LLM} & \textbf{Modifica applicata al modello} \\
+\midrule
+\texttt{rename\_event}      & Rinomina l'evento nel modello \\
+\texttt{set\_owner}         & Assegna ownership, sostituisce l'entità con riferimento nei contesti non-owner \\
+\texttt{reclassify\_domain} & Sposta il dominio tra core/supporting/generic \\
+\texttt{resolve\_conflict}  & Registra la risoluzione del conflitto \\
+\texttt{add\_mapping}       & Aggiunge un mapping anti-corruption layer \\
+\texttt{update\_pattern}    & Aggiorna il pattern di integrazione \\
+\bottomrule
+\end{tabular}
+\caption{Azioni di raffinamento interpretate dall'LLM}
+\label{tab:refiner-actions}
+\end{table}
+
+\section{Stima Adattiva delle Iterazioni}
+
+Dopo i 4 step, Agent~2 stima il numero di iterazioni necessarie per raggiungere
+lo stato \texttt{VALID}, restituito nel campo \texttt{suggested\_max\_iterations}.
+
+\begin{technicalbox}{Dettaglio Tecnico: Strategia a Due Livelli}
+\textbf{LLM (prioritario):} Qwen2.5 riceve un riepilogo dei problemi (quantità,
+severità, tipologia) e restituisce un intero tra 1 e 10 con
+\texttt{temperature: 0.1} per massima determinismo.
+
+\textbf{Euristica (fallback):}
+\begin{center}
+\begin{tabular}{ccc}
+\toprule
+Problemi manuali & Issue HIGH & Iterazioni stimate \\
+\midrule
+0     & -- & 1 \\
+1     & -- & 1 \\
+2--3  & -- & 2 \\
+4--5  & -- & 3 \\
+6+    & $\geq 3$ & min(N, 7) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Il workflow n8n aggiorna \texttt{max\_iterations} con l'ultimo valore stimato
+ad ogni iterazione (soft cap adattivo): se il contatore raggiunge il limite,
+\textit{Prepara Dati} lo incrementa automaticamente di 1 e il loop prosegue.
+\end{technicalbox}
+\section{Workflow n8n -- Loop Interattivo}
+Il file \texttt{workflow\_complete\_loop.json} implementa un workflow a 15 nodi
+che gestisce l'intero ciclo di vita dell'analisi:
+\begin{figure}[H]
+\centering
+\tikzset{
+  block/.style    = {rectangle, rounded corners, draw=blue!60, fill=blue!10,
+                     minimum width=3.2cm, minimum height=0.7cm, align=center, font=\small},
+  decision/.style = {diamond, draw=orange!70, fill=orange!15, aspect=2.5,
+                     align=center, font=\small},
+  arrow/.style    = {-{Stealth}, thick}
+}
+\begin{tikzpicture}[x=1cm, y=1cm]
+
+  % colonna centrale (x=0)
+  \node[block]    at (0,  0)    (start)      {Browser GET\\/webhook/agent2-start};
+  \node[block]    at (0, -2)    (scelta)     {Pagina Scelta};
+  \node[decision] at (0, -4)    (filelocale) {File Locale?};
+  \node[block]    at (0, -6.5)  (prepara)    {Prepara Dati};
+  \node[decision] at (0, -9)    (maxiter)    {Max Iter?};
+  \node[decision] at (0, -14)   (valid)      {Modello Valido?};
+
+  % colonna destra (x=5)
+  \node[block]    at (5, -4)    (lista)      {Lista File\\+ Selezione};
+  \node[block]    at (5, -9)    (analyze)    {POST /analyze};
+  \node[block]    at (5, -11)   (combina)    {Combina Risultati};
+  \node[block]    at (5, -12.6) (form)       {Form Domande HTML};
+
+  % colonna destra estrema (x=9)
+  \node[block]    at (9, -15.5) (successo)   {Pagina Successo};
+
+  % frecce colonna centrale
+  \draw[arrow] (start)  -- (scelta);
+  \draw[arrow] (scelta) -- (filelocale);
+  \draw[arrow] (filelocale) -- node[right]{\small No} (prepara);
+  \draw[arrow] (prepara) -- (maxiter);
+
+  % max iter: continua con analyze (soft cap)
+  \draw[arrow] (maxiter.east) -- node[above]{\small soft cap} (analyze.west);
+
+  % max iter: cap reached -> vai a valid (dritto, più pulito)
+  \draw[arrow] (maxiter.south) -- node[right]{\small cap reached} (valid.north);
+
+  % ramo file locale = sì
+  \draw[arrow] (filelocale.east) -- node[above]{\small Sì} (lista.west);
+  % lista -> prepara: una sola freccia con angolo retto
+  \draw[arrow] (lista.south) -- ++(0,-2) coordinate (ls_turn) |-
+  (prepara.east);
+
+  % analisi e form
+  \draw[arrow] (analyze) -- (combina);
+  \draw[arrow] (combina) -- (form);
+
+  % form -> valid (post submit) entra da destra in valid
+  \draw[arrow] (form.east) -- ++(1.2,0)
+              |- node[right, pos=0.25]{\small POST /submit} (valid.east);
+
+  % valid -> successo (sì) parte dal rombo, scende fino alla y di successo, poi va a destra
+  \draw[arrow] (valid.south) -- ++(0,-0.3)
+              |-node[above=2pt, pos=0.7]{\small Sì} (successo.west);
+
+  % loop no: valid -> prepara (lato sinistro)
+  \draw[arrow] (valid.west) -- ++(-2,0)
+              |- node[left, pos=0.25]{\small No} (prepara.west);
+
+\end{tikzpicture}
+\caption{Workflow n8n -- loop interattivo completo (15 nodi)}
+\label{fig:n8n-loop}
+\end{figure}
+
+
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{Nodo} & \textbf{Tipo} & \textbf{Funzione} \\
+\midrule
+START               & Webhook GET      & Pagina iniziale nel browser \\
+SUBMIT              & Webhook POST     & Riceve tutte le form submissions \\
+Detect Request Type & Code             & Classifica la richiesta (file/answers/initial) \\
+Route               & Switch           & Smista il flusso verso GET start, POST submit o risposta file \\
+Pagina Scelta       & Respond Webhook  & Serve l'HTML con i bottoni ``File locale'' / ``Incolla JSON'' \\
+Lista File          & HTTP Request     & Legge i file \texttt{.json} presenti in \texttt{input\_agent/} \\
+Selezione File      & Respond Webhook  & Serve l'HTML con la lista dei file selezionabili \\
+Carica File         & HTTP Request     & Legge dal disco il file JSON selezionato dall'utente \\
+Prepara Dati        & Code             & Normalizza iteration/sessione, applica soft cap \\
+Analizza Modello    & HTTP Request     & \texttt{POST http://agent2-api:8002/analyze} \\
+Combina Risultati   & Code             & Pre-renderizza HTML domande, aggiorna \texttt{max\_iterations} \\
+Modello Valido?     & IF               & Controlla \texttt{status == VALID}: sì $\to$ successo, no $\to$ form \\
+Form Domande        & Respond Webhook  & Mostra domande con radio buttons e testo libero \\
+Pagina Successo     & Respond Webhook  & Risultato finale quando \texttt{status=VALID} \\
+A2A Wait            & Respond Webhook  & Gestisce il ramo agente-a-agente (flusso non interattivo) \\
+\bottomrule
+\end{tabularx}
+\caption{Nodi del workflow n8n (15 totali)}
+\label{tab:n8n-nodes}
+\end{table}
+
+\section{Esempio Completo: Richiesta \texttt{POST /analyze}}
+
+\subsection{Struttura della Richiesta}
+
+Il campo obbligatorio è \texttt{domain\_model}; \texttt{use\_llm} e
+\texttt{previous\_answers} sono opzionali (default: \texttt{true} e \texttt{[]}).
+
+La richiesta \texttt{POST /analyze} riceve un domain model strutturato
+contenente: metadati del modello (identificativo, versione, autore),
+contesto di business, mappa dei domini (core, supporting, generic) con
+le relative entità, value object e requisiti funzionali, modello
+event-driven con gli eventi di dominio, e le integrazioni tra bounded
+context con i relativi pattern di comunicazione.
+
+\textbf{Esempio di scenario con issue intenzionali:} Si consideri un
+modello e-commerce con due domini core (\texttt{OrderManagement} e
+\texttt{CatalogManagement}), ciascuno contenente un'entità
+\texttt{Product} con significati diversi, un evento denominato
+\texttt{CreateOrder} (in forma imperativa anziché al passato) e
+requisiti funzionali contraddittori tra i due domini.
+
+\textbf{Issue attesi in questo scenario:}
+\begin{itemize}
+  \item \texttt{ENTITY\_OVERLAP} (HIGH): \texttt{Product} appare sia in
+        \texttt{OrderContext} che in \texttt{CatalogContext} senza differenziazione.
+  \item \texttt{REQUIREMENT\_CONFLICT} (HIGH): FR-001 (\textit{ordine immutabile})
+        e FR-002 (\textit{prodotto modificabile in qualsiasi momento}) si contraddicono
+        poiché l'ordine contiene un riferimento al prodotto.
+  \item \texttt{NAMING\_VIOLATION} (MEDIUM): \texttt{CreateOrder} non è al tempo
+        passato (dovrebbe essere \texttt{OrderCreated}).
+\end{itemize}
+
+\subsection{Struttura della Risposta}
+
+La risposta di Agent~2 contiene i seguenti elementi principali:
+
+\begin{itemize}
+  \item \textbf{Task ID:} Identificativo univoco UUID della sessione di analisi.
+  \item \textbf{Status:} Stato del modello (\texttt{VALID} oppure \texttt{ISSUES\_FOUND}).
+  \item \textbf{Summary:} Riepilogo numerico con totale issue, distribuzione per severità
+        (HIGH/MEDIUM/LOW), numero di domini e entità analizzati.
+  \item \textbf{Issues:} Lista dettagliata di ogni problema rilevato, con tipologia,
+        severità, descrizione testuale, elementi coinvolti e suggerimento di fix.
+        Gli issue auto-corretti (es.\ naming violations) sono marcati come tali.
+  \item \textbf{Follow-up Questions:} Domande contestuali generate dal LLM, ciascuna
+        con identificativo univoco, testo, severità, tipo di issue correlato e
+        2--3 risposte suggerite azionabili.
+  \item \textbf{Refined Model:} Versione aggiornata del domain model con le correzioni
+        automatiche già applicate (es.\ rinomina eventi al tempo passato).
+  \item \textbf{Suggested Max Iterations:} Stima adattiva del numero di iterazioni
+        necessarie per raggiungere lo stato \texttt{VALID}.
+\end{itemize}
+
+\section{Ciclo di Vita della Richiesta REST}
+
+Ogni chiamata HTTP ad Agent~2 segue una pipeline standard:
+
+\begin{technicalbox}{Dettaglio Tecnico: Gestione della Richiesta}
+\begin{enumerate}
+  \item \textbf{Ricezione:} Il framework deserializza il payload JSON
+        con validazione automatica dello schema.
+  \item \textbf{Task ID:} Viene generato un UUID univoco come identificativo
+        di sessione per il tracciamento del risultato.
+  \item \textbf{Pipeline:} Esecuzione sequenziale dei 5 step di analisi.
+  \item \textbf{Persistenza:} Il risultato viene salvato in
+        \texttt{output\_agent/\{filename\}/\{session\_id\}/iteration\_\{N\}.json}.
+  \item \textbf{Risposta:} Restituzione della \texttt{ValidationResponse}
+        con status, summary, issue, domande e modello raffinato.
+\end{enumerate}
+\end{technicalbox}
+\section{Gestione della Resilienza}
+
+\begin{technicalbox}{Dettaglio Tecnico: Error Handling e Fallback AI}
+\textbf{Exception Handling:} Le eccezioni vengono catturate a livello
+di endpoint e restituite come payload JSON strutturati con codice HTTP 500.
+
+\textbf{Fallback AI:} In caso di timeout o errore di Ollama:
+\begin{itemize}
+  \item \textit{Conflict Detector} -- usa solo le 22 regole DDD (nessun LLM)
+  \item \textit{Question Generator} -- usa i \texttt{question\_template}
+        dalla \texttt{validation\_checklist.json}
+  \item \textit{Model Refiner} -- utilizza la catena di interpretazione a 3 livelli
+        (Sezione~\ref{sec:model-refiner-detail}): se il LLM non è disponibile,
+        il fallback rule-based gestisce le risposte tramite matching delle
+        \texttt{suggested\_answers} e pattern specifici per tipo di issue
+        (incluso \texttt{SEMANTIC\_AMBIGUITY}); come ultima risorsa, il catch-all
+        registra la decisione utente per evitare loop infiniti
+  \item \textit{Iteration Estimator} -- usa la formula euristica
+\end{itemize}
+In tutti i casi il servizio risponde, garantendo la continuità del flusso.
+\end{technicalbox}
+
+% =============================================================================
+\chapter{Architettura e Governance del Dato}
+% =============================================================================
+
+\section{Modello Dati del Domain Model}
+
+Il dato centrale elaborato da Agent~2 è il \texttt{domain\_model} JSON,
+struttura gerarchica composta da:
+
+\begin{itemize}
+  \item \textbf{metadata} -- identificativo del modello, versione, autore (Agent~1),
+        timestamp di creazione.
+  \item \textbf{businessContext} -- obiettivi di business e perimetro del dominio.
+  \item \textbf{domainMap} -- mappa dei domini suddivisa in
+        \texttt{coreDomains}, \texttt{supportingDomains}, \texttt{genericDomains}.
+        Ogni dominio contiene \texttt{entities}, \texttt{valueObjects},
+        \texttt{functionalRequirements} e \texttt{boundedContext} con
+        \texttt{ubiquitousLanguage}.
+  \item \textbf{eventDrivenModel} -- lista degli eventi di dominio con emitter,
+        consumer, payload e pattern di comunicazione.
+  \item \textbf{contextIntegrations} -- relazioni tra bounded context con
+        tipo di integrazione e pattern comunicazione.
+\end{itemize}
+
+\begin{technicalbox}{Dettaglio Tecnico: Schema di Relazione tra Entità DDD}
+\textbf{One-to-Many:} Un dominio possiede N entità; un evento ha un emitter
+e N consumer. \\
+\textbf{Cross-Context Reference:} Dopo lo Step 0, le entità con ownership
+assegnata vengono sostituite con riferimenti (\texttt{\_referenceOnly: true})
+nei contesti non-owner, mantenendo la struttura originale come storia. \\
+\textbf{Metadata di Tracciabilità:} I campi \texttt{\_userGuidedFixes},
+\texttt{\_ownershipDecisions} e \texttt{\_conflictResolutions} vengono
+accumulati iterazione per iterazione per tracciare la storia delle decisioni.
+\end{technicalbox}
+
+\section{Schema Completo del Domain Model}
+
+Il domain model è il contratto principale tra Agent~1, Agent~2 e Agent~3.
+Lo schema è composto dalle seguenti sezioni principali:
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{lp{10cm}}
+\toprule
+\textbf{Sezione} & \textbf{Contenuto} \\
+\midrule
+\texttt{metadata}             & Identificativo del modello, versione, autore (Agent~1), timestamp di creazione. \\
+\texttt{businessContext}      & Descrizione del business, obiettivi e perimetro del dominio. \\
+\texttt{domainMap}            & Mappa dei domini suddivisa in \texttt{coreDomains}, \texttt{supportingDomains} e \texttt{genericDomains}. \\
+\texttt{eventDrivenModel}     & Lista degli eventi di dominio con emitter, consumer, payload e pattern di comunicazione. Gli eventi rinominati da Agent~2 sono marcati come auto-corretti. \\
+\texttt{contextIntegrations}  & Relazioni tra bounded context con tipo di integrazione (sync/async) e pattern (REST, Kafka, gRPC, GraphQL). \\
+\bottomrule
+\end{tabular}
+\caption{Struttura principale del Domain Model}
+\label{tab:domain-model-schema}
+\end{table}
+
+\textbf{Metadati aggiunti iterativamente da Agent~2:}
+\begin{itemize}
+  \item \texttt{\_userGuidedFixes}: storia delle risoluzioni manuali con ID domanda, azione applicata e timestamp.
+  \item \texttt{\_ownershipDecisions}: mappa delle assegnazioni di ownership approvate dall'utente.
+  \item \texttt{\_conflictResolutions}: conflitti risolti con identificativo, descrizione e modalità (utente o automatica).
+  \item \texttt{\_validationAnnotations}: annotazioni temporanee dell'iterazione corrente, rimosse dallo Step~0 successivo.
+  \item \texttt{\_followUpQuestions}: domande generate nell'iterazione corrente per il workflow n8n.
+\end{itemize}
+
+\textbf{DomainDefinition} -- ogni dominio nell'array contiene:
+\begin{itemize}
+  \item \textbf{Nome e classificazione:} identificativo del dominio e tipo (core, supporting, generic).
+  \item \textbf{Entità:} lista di entità con nome e attributi. Dopo l'assegnazione di ownership, le entità nei contesti non-owner vengono marcate come riferimenti.
+  \item \textbf{Value Object e Aggregati:} strutture DDD con i relativi attributi e radici.
+  \item \textbf{Requisiti:} funzionali (es.\ FR-001) e non funzionali (es.\ NFR-001).
+  \item \textbf{Bounded Context:} nome del contesto, ubiquitous language (dizionario termine-definizione) e dipendenze esterne.
+\end{itemize}
+
+\section{Entità di Supporto e Tracciabilità}
+
+\begin{itemize}
+  \item \textbf{ValidationResponse:} Il risultato completo di ogni analisi,
+        comprendente summary numerico, lista degli issue per categoria,
+        follow-up questions e modello raffinato. Persistito come JSON
+        in \texttt{output\_agent/}.
+
+  \item \textbf{Task (A2A):} Entità in-memory che traccia lo stato
+        (\texttt{SUBMITTED} $\rightarrow$ \texttt{WORKING} $\rightarrow$
+        \texttt{COMPLETED}/\texttt{FAILED}/\texttt{CANCELLED}) di ogni
+        richiesta ricevuta via protocollo A2A.
+
+  \item \textbf{SemanticIssue / ConflictIssue:} Entità intermedie generate
+        rispettivamente dal SemanticAnalyzer e
+        dal ConflictDetector, con tipologia, severità ed
+        elementi affected. Serializzate in formato JSON per la risposta.
+
+  \item \textbf{FollowUpQuestion:} Struttura dati che rappresenta una singola
+        domanda contestuale con ID univoco, testo, severità, tipo di issue
+        correlato e lista di risposte suggerite.
+\end{itemize}
+
+\section{Knowledge Base}
+
+La knowledge base è il fondamento delle regole DDD applicate nello Step~2
+(la suddivisione in 7 categorie è riportata nella Tabella del Capitolo~6):
+
+\begin{itemize}
+  \item \textbf{\texttt{ddd\_rules.md} (21 KB):} Guida DDD strutturata in
+        8 parti: classificazione domini, bounded context, entity vs value object,
+        regole di coerenza tra domini, event-driven architecture, checklist di
+        validazione, tipologie di problemi da rilevare e template per l'output.
+        Usata dall'LLM come contesto nel prompt di conflict detection.
+
+  \item \textbf{\texttt{validation\_checklist.json}:} 22 regole in formato
+        strutturato JSON, organizzate in 7 categorie (DC, BC, EVO, EO, RC, EA, CP).
+        Ogni regola include un \texttt{question\_template} per il fallback del
+        question generator.
+\end{itemize}
+\section{Tipologie di Issue Rilevate}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{llp{7cm}}
+\toprule
+\textbf{Tipo} & \textbf{Severità} & \textbf{Descrizione} \\
+\midrule
+\texttt{ENTITY\_OVERLAP}       & HIGH   & Stessa entità in più bounded context senza differenziazione. \\
+\texttt{SEMANTIC\_AMBIGUITY}   & MEDIUM & Termine con significati diversi nel contesto. \\
+\texttt{REQUIREMENT\_CONFLICT} & HIGH   & Requisiti funzionali che si contraddicono. \\
+\texttt{DUPLICATE\_EVENT}      & HIGH   & Stesso evento emesso da più domini. \\
+\texttt{NAMING\_VIOLATION}     & LOW--MEDIUM & Evento non denominato al tempo passato. \\
+\texttt{INCOMPATIBLE\_PATTERN} & HIGH   & Pattern comunicazione incompatibile con i requisiti. \\
+\texttt{MISCLASSIFIED\_DOMAIN} & MEDIUM & Classificazione dominio errata (es.\ Auth come Core). \\
+\bottomrule
+\end{tabular}
+\caption{Tipologie di issue rilevate da Agent~2}
+\label{tab:issue-types}
+\end{table}
+
+\section{Persistenza e Integrità}
+
+\begin{technicalbox}{Dettaglio Tecnico: Strategia di Output}
+\textbf{File-based Output:} Ogni analisi viene persistita in
+\texttt{output\_agent/\{filename\}/\{session\_id\}/iteration\_\{N\}.json},
+dove \texttt{filename} è il nome del file di input (o del modello),
+\texttt{session\_id} è l'identificativo di sessione (o timestamp UTC)
+e \texttt{N} è il numero di iterazione a due cifre.
+La directory viene creata automaticamente se assente.
+
+\textbf{In-Memory Task Store:} I task A2A sono conservati in
+una struttura dati in memoria per la durata del processo. Per ambienti
+di produzione è prevista la sostituzione con Redis o un database esterno.
+
+\textbf{Read-Only Knowledge Base:} Il volume \texttt{./knowledge\_base}
+è montato in sola lettura (\texttt{:ro}) nel container, prevenendo
+modifiche accidentali alle regole DDD durante l'esecuzione.
+\end{technicalbox}
+
+% =============================================================================
+\chapter{Sicurezza e Governance}
+% =============================================================================
+
+\section{Modello di Accesso}
+
+Agent~2 opera in un contesto di pipeline interna: gli endpoint non sono
+esposti direttamente a utenti finali anonimi ma accessibili da:
+\begin{itemize}
+  \item n8n (sulla rete interna Docker \texttt{agent2-network})
+  \item Agent~1/Agent~3 via A2A Protocol con opzionale JWT Bearer
+  \item Team DevOps per debug e configurazione
+\end{itemize}
+
+\begin{technicalbox}{Dettaglio Tecnico: Meccanismi di Sicurezza}
+\textbf{Container non-root:} Il Dockerfile crea l'utente \texttt{agent2user}
+(UID 1000) e avvia l'applicazione con privilegi ridotti.
+
+\textbf{Network Isolation:} La rete bridge \texttt{agent2-network}
+(subnet \texttt{172.28.0.0/16}) isola i container dai servizi esterni.
+Solo le porte 8002 (agent2-api) e 5678 (n8n) sono esposte all'host.
+
+\textbf{A2A Authentication:} L'Agent Card definisce due schemi di sicurezza:
+JWT Bearer Token e API Key (header \texttt{X-API-Key}), entrambi opzionali
+nella configurazione attuale ma predisposti per ambienti più restrittivi.
+
+\textbf{Read-Only Volumes:} \texttt{./knowledge\_base} e \texttt{./input\_agent}
+sono montati in sola lettura, limitando la superficie di attacco.
+
+\textbf{CORS:} Abilitato per tutti i metodi e header (\texttt{allow\_origins=["*"]})
+nella configurazione corrente, adeguata per la pipeline interna.
+\end{technicalbox}
+
+\section{Governance dell'Analisi}
+
+La governance assicura che solo modelli validati procedano ad Agent~3:
+
+\begin{itemize}
+  \item \textbf{Stato Binario Certificato:} Il sistema distingue nettamente
+        tra \texttt{VALID} (0 issue, procede ad Agent~3) e \texttt{ISSUES\_FOUND}
+        (problemi rilevati, loop continua). Nessun modello parzialmente validato
+        può passare al nodo successivo.
+
+  \item \textbf{Segregazione delle Funzioni:} La \textit{detection} (Step~1--2)
+        è separata dalla \textit{resolution} (Step~0 + Step~4), garantendo
+        che le modifiche siano sempre motivate da issue specifici rilevati in
+        modo indipendente.
+
+  \item \textbf{Tracciabilità delle Decisioni:} I metadati
+        \texttt{\_userGuidedFixes} e \texttt{\_ownershipDecisions} accumulano
+        la storia di tutte le scelte del business stakeholder durante il loop,
+        fornendo un audit trail delle motivazioni architetturali.
+\end{itemize}
+
+\section{Tracciabilità e Audit}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{Strumento} & \textbf{Scopo} & \textbf{Dettaglio Operativo} \\
+\midrule
+Task ID (UUID) & Tracciabilità E2E & Collega ogni log all'analisi originante. \\
+\texttt{\_userGuidedFixes} & Audit delle decisioni & Storia delle risoluzioni manuali nel modello. \\
+\texttt{output\_agent/} & Persistenza risultati & JSON completo di ogni analisi per Agent~3. \\
+Log strutturati & Diagnostica & Logging JSON con level, timestamp e task\_id. \\
+\bottomrule
+\end{tabularx}
+\caption{Strumenti di Audit e Tracciabilità}
+\label{tab:audit-tools}
+\end{table}
+
+% =============================================================================
+\chapter{Osservabilità e Monitoraggio}
+% =============================================================================
+
+\section{Logging Strutturato}
+
+Il backend produce log in formato strutturato.
+Ogni riga di log include task ID,
+livello, timestamp e messaggio descrittivo.
+
+\begin{technicalbox}{Dettaglio Tecnico: Tracciabilità per Task}
+Ogni step della pipeline è tracciato con il task\_id:
+\begin{itemize}
+  \item \texttt{[task\_id] Starting analysis pipeline...}
+  \item \texttt{[task\_id] Found N semantic issues}
+  \item \texttt{[task\_id] Found N conflict issues}
+  \item \texttt{[task\_id] Generated N questions}
+  \item \texttt{[task\_id] Suggested max iterations: N}
+\end{itemize}
+I log sono persistiti nel volume \texttt{agent2\_logs} e accessibili
+tramite \texttt{docker logs agent2-api}.
+\end{technicalbox}
+
+\section{Health Check e Monitoring}
+
+L'endpoint \texttt{GET /health} fornisce lo stato in tempo reale di tutti
+i servizi interni. La risposta include:
+
+\begin{itemize}
+  \item \textbf{Status generale:} indicatore di salute del sistema (\texttt{healthy}/\texttt{unhealthy}).
+  \item \textbf{Stato dei 4 servizi:} SemanticAnalyzer, ConflictDetector, QuestionGenerator e ModelRefiner, ciascuno con un flag di disponibilità.
+  \item \textbf{Configurazione corrente:} URL di Ollama, modello LLM in uso e modello di embedding attivo.
+\end{itemize}
+
+Docker Compose esegue automaticamente questo health check ogni 30 secondi
+(\texttt{interval: 30s}, \texttt{retries: 3}), garantendo il riavvio
+automatico del container in caso di anomalia.
+\section{Indicatori di Performance (KPI)}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{KPI} & \textbf{Origine} & \textbf{Diagnostica} \\
+\midrule
+Latenza /analyze con LLM    & Log applicativi & Rilevamento colli di bottiglia Ollama. \\
+Latenza /analyze senza LLM  & Log applicativi & Baseline performance regole DDD. \\
+Iterazioni per convergenza  & ValidationResponse & Misura efficacia del raffinamento. \\
+LLM Fallback rate           & Log ``using heuristic'' & Monitoraggio disponibilità Ollama. \\
+Issue per categoria         & summary JSON & Distribuzione tipologie di errori DDD. \\
+\bottomrule
+\end{tabularx}
+\caption{Indicatori di Performance e Diagnostica}
+\label{tab:kpi}
+\end{table}
+
+\section{Monitoraggio Kafka (Predisposto)}
+
+Con l'attivazione del \texttt{docker-compose.kafka.yml}, Kafka UI
+(porta 8080) fornisce una dashboard web per:
+\begin{itemize}
+  \item Ispezione dei topic \texttt{agent1-output} e \texttt{agent2-output}
+  \item Visualizzazione dei messaggi in transito
+  \item Monitoraggio del consumer group \texttt{agent2-consistency-analyzer}
+  \item Rilevamento del consumer lag per diagnosi di ritardi nella pipeline
+\end{itemize}
+
+% =============================================================================
+\chapter{Deployment e Operatività}
+% =============================================================================
+
+\section{Topologia di Esecuzione}
+
+Il sistema è distribuito come uno stack di container orchestrati tramite
+Docker Compose (cfr.\ Tabelle~\ref{tab:core-services} e~\ref{tab:kafka-services}
+nel Capitolo~6 per il dettaglio dei singoli servizi), disponibile in due
+configurazioni principali:
+
+\begin{table}[H]
+\centering
+\small
+\renewcommand{\arraystretch}{1.35}
+\setlength{\tabcolsep}{10pt}
+
+\begin{tabularx}{\textwidth}{
+  >{\raggedright\arraybackslash}p{6cm}
+  @{\hspace{5pt}}
+  >{\raggedright\arraybackslash}p{4cm}
+  @{\hspace{5pt}}
+  >{\raggedright\arraybackslash}X
+}
+\toprule
+\textbf{File} & \textbf{Container} & \textbf{Quando usarlo} \\
+\midrule
+\texttt{docker-compose.yml}
+& 2 (agent2-api, n8n)
+& Configurazione standard per il flusso interattivo REST \\
+
+\texttt{docker-compose.kafka.yml}
+& +4 (zookeeper, kafka, consumer, kafka-ui)
+& Da usare solo per pipeline automatizzate agent-to-agent (A2A) \\
+\bottomrule
+\end{tabularx}
+
+\caption{Configurazioni Docker Compose del sistema}
+\label{tab:docker-configs}
+\end{table}
+\begin{technicalbox}{Dettaglio tecnico: avvio e healthcheck}
+\begin{lstlisting}[style=bashbox]
+# flusso standard (2 container, ~3 GB RAM)
+docker compose up -d --build
+
+# flusso completo con kafka (6 container, ~9 GB RAM)
+docker compose -f docker-compose.yml \
+  -f docker-compose.kafka.yml up -d --build
+
+# verifica stato servizio
+curl http://localhost:8002/health
+\end{lstlisting}
+
+\vspace{2pt}
+Il Dockerfile utilizza una build multi-stage per ridurre la dimensione finale
+dell'immagine: il primo stage compila le dipendenze, mentre il secondo include
+esclusivamente l'ambiente di runtime e l'applicazione.
+\end{technicalbox}
+
+\section{Configurazione e Variabili d'Ambiente}
+
+Il comportamento di Agent~2 è interamente configurabile tramite variabili
+d'ambiente, con default hardcoded nel \texttt{docker-compose.yml}:
+
+\begin{lstlisting}[language=bash]
+# Ollama
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+OLLAMA_MODEL=qwen2.5:14b
+OLLAMA_TIMEOUT=180
+
+# Analisi
+EMBEDDINGS_MODEL=all-MiniLM-L6-v2
+ENTITY_OVERLAP_THRESHOLD=0.85
+SEMANTIC_SIMILARITY_THRESHOLD=0.75
+MAX_FOLLOW_UP_QUESTIONS=5
+
+# Kafka (futuro)
+KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+KAFKA_INPUT_TOPIC=agent1-output
+KAFKA_OUTPUT_TOPIC=agent2-output
+KAFKA_GROUP_ID=agent2-consistency-analyzer
+
+# Logging
+LOG_LEVEL=INFO
+\end{lstlisting}
+
+\section{Persistenza e Gestione dei Dati}
+
+\begin{itemize}
+  \item \textbf{\texttt{./knowledge\_base}} $\rightarrow$ \texttt{/app/knowledge\_base:ro}:
+        Regole DDD e checklist di validazione (sola lettura).
+  \item \textbf{\texttt{./input\_agent}} $\rightarrow$ \texttt{/app/input\_agent:ro}:
+        File JSON di esempio per test senza Agent~1 (sola lettura).
+  \item \textbf{\texttt{agent2\_output}} (volume Docker): Output delle analisi
+        in \texttt{/app/output\_agent}, consumato da Agent~3.
+  \item \textbf{\texttt{agent2\_logs}} (volume Docker): Log dell'applicazione
+        in \texttt{/app/logs}.
+\end{itemize}
+\section{Checklist di Manutenzione Operativa}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{Attività} & \textbf{Strumento} & \textbf{Obiettivo} \\
+\midrule
+Health Check        & \texttt{GET /health}         & Verifica disponibilità backend e servizi. \\
+Stato container     & \texttt{docker ps}           & Verifica che tutti i container siano healthy. \\
+Log analisi         & \texttt{docker logs agent2-api} & Diagnostica errori LLM o pipeline. \\
+Output archiviati   & \texttt{output\_agent/}      & Verifica persistenza dei modelli validati. \\
+Modello Ollama      & \texttt{ollama list}         & Verifica che \texttt{qwen2.5:14b} sia disponibile. \\
+\bottomrule
+\end{tabularx}
+\caption{Checklist Operativa di Manutenzione}
+\label{tab:maintenance}
+\end{table}
+
+\section{Garanzia della Qualità e Testing}
+
+\begin{technicalbox}{Dettaglio Tecnico: File di Test Predisposti}
+La directory \texttt{input\_agent/} contiene 5 file JSON con copertura
+sistematica di tutte le tipologie di issue:
+
+\begin{center}
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{File} & \textbf{Dominio} & \textbf{Issue / Scopo} \\
+\midrule
+\texttt{example\_good.json}    & E-Commerce & Nessuno -- verifica \texttt{VALID} \\
+\texttt{example\_demo.json}    & E-Commerce & 3 bug intenzionali -- demo rapida \\
+\texttt{example\_bad.json}     & E-Commerce & Stress test completo (tutti i tipi di issue) \\
+\texttt{case\_healthcare.json} & Sanità     & 4 issue clinici (overlap Patient, ambiguity Visita) \\
+\texttt{case\_banking.json}    & Banking    & 4 issue finanziari (naming, pattern, conflict) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+Gli endpoint \texttt{/source/files}, \texttt{/source/file} e
+\texttt{/source/analyze-by-file} permettono di testare direttamente
+questi file senza Agent~1.
+\end{technicalbox}
+
+\section{Resilienza Operativa}
+
+Il deployment è progettato per essere self-contained su singola macchina.
+L'esternalizzazione di Ollama sull'host permette di:
+\begin{itemize}
+  \item Aggiornare il modello LLM (\texttt{ollama pull}) senza riavviare
+        i container
+  \item Sperimentare con modelli diversi modificando solo
+        \texttt{OLLAMA\_MODEL} nel \texttt{.env}
+  \item Scalare il consumer Kafka modificando \texttt{CONSUMER\_REPLICAS}
+        senza rebuild dell'immagine
+\end{itemize}
+
+\section{Backup e Disaster Recovery}
+
+\begin{itemize}
+  \item \textbf{Knowledge Base:} I file \texttt{ddd\_rules.md} e
+        \texttt{validation\_checklist.json} sono versionati in Git.
+        Nessun backup aggiuntivo richiesto.
+
+  \item \textbf{Output Analisi:} Il volume \texttt{agent2\_output} contiene
+        i risultati persistiti. In caso di guasto, è sufficiente riavviare
+        lo stack: il volume Docker sopravvive ai container.
+
+  \item \textbf{Workflow n8n:} I file \texttt{n8n/*.json} sono esportazioni
+        versionabili dei workflow. Il volume \texttt{n8n\_data} conserva
+        la configurazione n8n tra i riavvii.
+
+  \item \textbf{Kafka (futuro):} Con retention configurata a 168 ore (7 giorni),
+        i messaggi non ancora consumati da Agent~3 sono recuperabili via
+        offset reset anche dopo un riavvio del consumer.
+\end{itemize}
+
+% =============================================================================
+\chapter{Limiti e Scelte Progettuali}
+% =============================================================================
+
+\section{Scelte di Semplificazione (Trade-offs)}
+
+Per mantenere Agent~2 autonomo, eseguibile su una singola macchina e
+facilmente testabile, sono state adottate le seguenti scelte:
+
+\begin{itemize}
+  \item \textbf{Task Store In-Memory:} I task A2A sono conservati in una
+        struttura dati in memoria. Non persistono tra i riavvii del container.
+        Per produzione è prevista la sostituzione con Redis.
+
+  \item \textbf{Ollama fuori da Docker:} Scelta deliberata per garantire
+        accesso diretto alla GPU senza overhead di virtualizzazione.
+        Introduce una dipendenza sull'host che deve essere gestita manualmente.
+
+  \item \textbf{n8n come Frontend:} L'uso di n8n come orchestratore workflow
+        evita lo sviluppo di un frontend React/Vue dedicato, riducendo la
+        complessità dello stack. Il compromesso è la dipendenza dall'ecosistema n8n
+        e la limitazione nell'accesso alle variabili d'ambiente in n8n v2.
+
+  \item \textbf{Kafka Separato in File Distinto:} La separazione in
+        \texttt{docker-compose.kafka.yml} risparmia ~6 GB RAM e 6 CPU nei
+        casi d'uso standard (solo REST), al costo di un comando più complesso
+        per l'avvio con la pipeline completa.
+\end{itemize}
+
+\begin{technicalbox}{Technical Insight: Filosofia ``Zero Dependency''}
+Agent~2 funziona con un singolo comando (\texttt{docker compose up -d}),
+senza richiedere database esterni, servizi cloud o identity provider.
+L'unico prerequisito esterno è Ollama sull'host, giustificato dalla necessità
+di accesso diretto alla GPU per prestazioni di inferenza accettabili.
+\end{technicalbox}
+\section{Analisi dei Compromessi Progettuali}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{Area} & \textbf{Compromesso Accettato} & \textbf{Motivazione Tecnica} \\
+\midrule
+Pipeline LLM   & LLM-first con fallback euristico & Qualità massima senza degradare la disponibilità. \\
+Iterazioni     & Soft cap adattivo (non hard stop)  & Convergenza garantita verso \texttt{VALID}. \\
+AI locale      & Ollama sull'host (non in Docker)   & Accesso diretto GPU, privacy dei dati, autonomia. \\
+Stato task     & In-memory (non persistente)        & Semplicità; sufficiente per sessioni di analisi. \\
+Kafka          & Pipeline predisposta, non attiva   & Riduzione overhead nella modalità interattiva. \\
+\bottomrule
+\end{tabularx}
+\caption{Matrice dei Compromessi Progettuali}
+\label{tab:tradeoffs}
+\end{table}
+
+\section{Consapevolezza del Perimetro Progettuale}
+
+Le scelte descritte definiscono Agent~2 come un sistema modulare e indipendente.
+I limiti identificati non rappresentano debolezze strutturali, ma decisioni
+deliberate per mantenere il software:
+
+\begin{description}
+  \item[Eseguibile:] Il sistema parte su una singola macchina con un solo comando.
+  \item[Testabile:] I file di esempio in \texttt{input\_agent/} coprono tutti e 7
+        i tipi di issue senza necessità di Agent~1.
+  \item[Estendibile:] L'aggiunta di nuove regole DDD richiede solo la modifica di
+        \texttt{ddd\_rules.md} e \texttt{validation\_checklist.json}, senza
+        cambiamenti al codice.
+\end{description}
+
+% =============================================================================
+\chapter{Roadmap ed Evoluzioni Future}
+% =============================================================================
+
+\section{Pipeline Kafka Automatica (Priorità Alta)}
+
+La prima evoluzione naturale -- già predisposta architetturalmente -- è l'attivazione
+della pipeline automatica Agent~1 $\rightarrow$ Agent~2 $\rightarrow$ Agent~3
+via Kafka.
+
+Il file \texttt{docker-compose.kafka.yml} è già completo e testato. L'attivazione
+richiede:
+\begin{enumerate}
+  \item Avvio con il comando multi-file
+  \item Configurazione di Agent~1 per pubblicare su \texttt{agent1-output}
+  \item Configurazione di Agent~3 per consumare \texttt{agent2-output}
+\end{enumerate}
+
+\begin{technicalbox}{Technical Insight: Scalabilità del Consumer}
+La variabile \texttt{CONSUMER\_REPLICAS} permette di scalare orizzontalmente
+il consumer da 1 a $N$ istanze. Con 4 partizioni per topic e
+\texttt{MAX\_WORKERS=4} per replica, il sistema può processare fino a 16 modelli
+in parallelo, sufficiente per pipeline enterprise di medie dimensioni.
+\end{technicalbox}
+
+\section{Persistenza Task con Redis}
+
+La sostituzione del task store in-memory con Redis permetterebbe:
+\begin{itemize}
+  \item Sopravvivenza dei task ai riavvii del container
+  \item Condivisione dello stato tra più istanze dell'API in modalità scaled
+  \item TTL automatico per pulizia dei task obsoleti
+\end{itemize}
+L'integrazione è predisposta architetturalmente: sostituire il dizionario
+lo store in-memory con un client Redis richiede modifiche minime all'endpoint layer.
+\section{Evoluzione della Knowledge Base}
+
+La knowledge base DDD è progettata per crescere in modo indipendente dal codice:
+\begin{itemize}
+  \item \textbf{Regole Domain-Specific:} Aggiunta di regole specializzate per
+        domini verticali (banking, healthcare, e-commerce) con pattern e
+        anti-pattern settoriali.
+  \item \textbf{Versionamento Semantico:} Introduzione di una versione per la
+        \texttt{validation\_checklist.json} per tracciare l'evoluzione delle
+        regole nel tempo.
+  \item \textbf{Motore Esterno (Groq):} Per pipeline con requisiti di latenza
+        ultra-bassa, integrazione di un Adapter AI capace di commutare tra
+        Ollama (locale, privacy) e Groq (cloud, latenza $<$1s) in base al carico
+        o alla complessità della richiesta.
+\end{itemize}
+
+\section{Integrazione con Agent 1 e Agent 3}
+
+\begin{itemize}
+  \item \textbf{Feedback verso Agent~1:} In caso di modello irrisolvibile
+        (troppi issue strutturali dopo $N$ iterazioni), Agent~2 potrebbe
+        rimandare il modello ad Agent~1 con annotazioni specifiche sui gap
+        informativi da colmare nell'intervista.
+
+  \item \textbf{Pre-processing per Agent~3:} Arricchimento del modello raffinato
+        con metadati di specifica (hint per pattern architetturali, suggerimenti
+        di tecnologie) per facilitare la generazione di microservizi da parte
+        di Agent~3.
+\end{itemize}
+
+% =============================================================================
+\chapter{Conclusioni}
+% =============================================================================
+
+\section{Sintesi dei Risultati}
+
+La realizzazione di Agent~2 ha permesso di implementare un quality gate
+intelligente per la pipeline \textit{Intelligent Domain Architect},
+capace di trasformare un domain model grezzo in un artefatto certificato
+e pronto per la generazione di microservizi.
+
+Il progetto consegna un microservizio che risponde a tre sfide fondamentali
+del moderno software design:
+
+\begin{itemize}
+  \item \textbf{Validazione Semantica Profonda:} La combinazione di embedding
+        vettoriali (\texttt{all-MiniLM-L6-v2}) e analisi LLM (Qwen2.5~14B)
+        rileva tipologie di incoerenza che sfuggono agli strumenti di analisi
+        sintattica convenzionale.
+
+  \item \textbf{Raffinamento Collaborativo:} Il loop iterativo n8n trasforma
+        la validazione da processo passivo a dialogo attivo con il business
+        stakeholder, garantendo che ogni modifica al modello sia consapevole
+        e motivata.
+
+  \item \textbf{Architettura Evolutiva:} La separazione in due file
+        docker-compose, la stessa immagine Docker per API e consumer Kafka,
+        e il sistema di fallback AI garantiscono che il sistema sia pronto
+        per evoluzioni verso la pipeline automatica senza stravolgere
+        l'architettura esistente.
+\end{itemize}
+
+\section{Valore Progettuale e Coerenza}
+
+La coerenza del lavoro risiede nel perfetto allineamento tra i requisiti
+della pipeline e le scelte implementative. Ogni decisione tecnica -- dalla
+scelta di Qwen2.5~14B rispetto a Llama3, al soft cap adattivo nel loop n8n,
+alla separazione del Kafka in file distinto -- è guidata da un obiettivo
+concreto e misurabile.
+
+Agent~2 dimostra che la validazione automatica di modelli DDD richiede un
+approccio ibrido: regole formali per i casi chiari, ragionamento LLM per
+i casi complessi, e interazione umana per le decisioni architetturali
+che richiedono contesto di business non codificabile.
+\section{Considerazioni Finali}
+
+\begin{tcolorbox}[enhanced, colback=lightgray, colframe=boxheader,
+  title=\textbf{Sintesi del Valore Aggiunto}, fonttitle=\small\bfseries,
+  colbacktitle=boxheader, coltitle=white]
+Agent~2 non è un semplice linter DDD, ma un \textbf{mediatore intelligente}
+tra la fase di analisi del dominio e quella di implementazione.
+Il ciclo iterativo guidato dall'LLM assicura che il domain model
+converga verso la coerenza senza imporre una visione rigida,
+ma guidando il business stakeholder verso decisioni architetturalmente
+solide attraverso domande contestuali e risposte suggerite azionabili.
+\end{tcolorbox}
+
+Il progetto conferma che un'architettura a microservizi orientata agli
+agenti può implementare processi di governance complessi in modo modulare,
+scalabile e trasparente, ponendo le basi per una pipeline di sviluppo
+software sempre più automatizzata ma rigorosamente controllata.
+
+% =============================================================================
+\chapter*{Glossario}
+\addcontentsline{toc}{chapter}{Glossario}
+% =============================================================================
+
+\begin{description}[style=nextline]
+  \item[A2A Protocol (Agent-to-Agent):] Protocollo standardizzato (v0.3) per
+        la comunicazione strutturata tra agenti AI, basato su Task, Message e Artifact.
+  \item[ACL (Anticorruption Layer):] Pattern DDD in cui un bounded context
+        costruisce uno strato di traduzione per proteggersi dal modello di un
+        contesto esterno, evitando la contaminazione del proprio dominio.
+  \item[Agent Card:] Documento JSON pubblicato su \texttt{/.well-known/agent.json}
+        che descrive le capacità, gli skill e gli schemi di sicurezza di un agente A2A.
+  \item[Aggregate:] Cluster di entity e value object trattato come unità
+        transazionale unica nel DDD. L'accesso avviene tramite l'Aggregate Root,
+        che garantisce le invarianti di business.
+  \item[Bounded Context:] Confine logico all'interno di un dominio DDD in cui
+        un modello e un linguaggio ubiquitario hanno un significato preciso e coerente.
+  \item[Consumer Group:] In Kafka, gruppo di consumer che si ripartiscono le
+        partizioni di un topic per parallelizzare la lettura. Se un consumer
+        muore, le sue partizioni vengono riassegnate automaticamente.
+  \item[Context Map:] Rappresentazione delle relazioni tra bounded context nel DDD,
+        con pattern di integrazione quali Shared Kernel, Customer-Supplier, ACL,
+        Conformist, Open Host Service e Published Language.
+  \item[Coreografia:] Pattern di coordinamento event-driven in cui nessun
+        controllore centrale dirige il flusso: ogni servizio reagisce
+        autonomamente agli eventi pubblicati dagli altri.
+  \item[CQRS (Command Query Responsibility Segregation):] Pattern che separa
+        il modello di scrittura (command) dal modello di lettura (query),
+        consentendo di ottimizzare e scalare ciascuno indipendentemente.
+  \item[DDD (Domain-Driven Design):] Approccio alla progettazione software che
+        allinea l'implementazione al modello di business tramite un linguaggio condiviso.
+  \item[Domain Event:] Fatto significativo accaduto nel dominio, espresso al
+        tempo passato (es.\ \texttt{OrderPlaced}). Meccanismo naturale di
+        comunicazione disaccoppiata tra bounded context.
+  \item[Embedding:] Rappresentazione vettoriale numerica di un testo in uno
+        spazio semantico ad alta dimensionalità, usata per calcolare similarità.
+  \item[Entity Overlap:] Violazione DDD in cui la stessa entità appare in più
+        bounded context senza differenziazione di ruolo o ownership.
+  \item[Event Sourcing:] Pattern in cui lo stato di un'entità viene memorizzato
+        come sequenza ordinata di eventi immutabili, anziché come snapshot.
+        Lo stato corrente si ottiene riproducendo la sequenza.
+  \item[FastAPI:] Framework per API REST asincrone ad alte prestazioni,
+        con generazione automatica della documentazione OpenAPI.
+  \item[GQA (Grouped-Query Attention):] Ottimizzazione architetturale adottata da
+        Qwen2.5~14B che riduce il costo computazionale dell'attenzione, aumentando
+        la velocità di inferenza.
+  \item[Kafka:] Piattaforma di event streaming distribuita basata su un log
+        immutabile e append-only, organizzata in topic e partizioni, con
+        replicazione Leader/Follower per tolleranza ai guasti.
+  \item[LLM-first:] Approccio che usa il Large Language Model come prima scelta
+        per task di ragionamento, con fallback a euristica o template in caso di errore.
+  \item[Qwen2.5~14B:] Modello linguistico a 14,8 miliardi di parametri di Alibaba Cloud,
+        ottimizzato per output strutturato JSON, ragionamento multi-step e seguire
+        istruzioni complesse. Usato via Ollama in formato Q4\_K\_M ($\sim$9 GB).
+  \item[n8n:] Workflow automation engine open-source con interfaccia visuale,
+        usato come orchestratore del loop interattivo utente.
+  \item[Ollama:] Runtime locale per modelli LLM open-source, con supporto GPU
+        nativo e API REST compatibile OpenAI.
+  \item[Orchestrazione:] Pattern di coordinamento in cui un componente centrale
+        conosce e dirige l'intero flusso di lavoro, invocando i servizi nella
+        sequenza corretta e gestendo errori e compensazioni.
+  \item[Partizione:] Suddivisione di un topic Kafka in segmenti indipendenti
+        distribuiti su più broker, che consentono parallelismo in lettura e
+        scrittura. L'ordine è garantito solo all'interno di una partizione.
+  \item[RAG (Retrieval-Augmented Generation):] Tecnica che inietta documenti
+        rilevanti nel prompt LLM per ancorare la generazione a fonti verificate.
+        Usata nel conflict detector con le regole DDD come contesto.
+  \item[Ubiquitous Language:] Vocabolario condiviso tra sviluppatori e domain expert
+        all'interno di un bounded context, principio fondamentale del DDD.
+  \item[Value Object:] Oggetto DDD immutabile definito dai suoi attributi,
+        privo di identità propria. Due value object con gli stessi attributi
+        sono considerati equivalenti (es.\ un indirizzo, un importo monetario).
+  \item[Zookeeper:] Servizio di coordinamento distribuito richiesto da Kafka
+        per la gestione dei broker e dei metadati dei topic.
+\end{description}
+
+% =============================================================================
+\appendix
+\chapter{Guida Rapida all'Installazione}
+% =============================================================================
+
+\section{Prerequisiti}
+
+\begin{enumerate}
+  \item \textbf{Docker Desktop} installato e in esecuzione
+  \item \textbf{Ollama} installato sull'host con modello Qwen2.5~14B:
+\begin{lstlisting}[language=bash]
+ollama pull qwen2.5:14b        # ~9 GB, richiede connessione internet
+ollama serve   # avvia il server se non parte automaticamente
+\end{lstlisting}
+  \item \textbf{GPU NVIDIA} con almeno 8 GB VRAM (raccomandato: RTX~4070 / 8 GB)
+        oppure CPU con $\geq$16 GB RAM per inferenza CPU (più lenta)
+\end{enumerate}
+
+\section{Avvio tramite Docker Compose}
+
+\begin{lstlisting}[language=bash]
+# Clona il repository
+git clone <repository-url>
+cd agent-consistency-analyzer
+
+# Avvio flusso standard (REST + n8n)
+docker compose up -d --build
+
+# Attendi che i container siano healthy (~40s)
+docker ps  # verifica STATUS = healthy
+
+# Test rapido
+curl http://localhost:8002/health
+\end{lstlisting}
+
+In alternativa, usa lo script PowerShell incluso che automatizza l'intero avvio
+(verifica Docker, avvia Ollama se necessario, controlla il modello LLM,
+build dell'immagine e avvio dei container):
+\begin{lstlisting}[language={}]
+powershell -ExecutionPolicy Bypass -File .\START_DEMO.ps1
+\end{lstlisting}
+
+\section{Avvio con Pipeline Kafka (Futuro)}
+
+\begin{lstlisting}[language=bash]
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.kafka.yml \
+  up -d --build
+\end{lstlisting}
+
+\section{Variabili d'Ambiente (file \texttt{.env})}
+
+Creare un file \texttt{.env} nella root del progetto:
+
+\begin{lstlisting}[language=bash]
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+OLLAMA_MODEL=qwen2.5:14b
+OLLAMA_TIMEOUT=180
+
+EMBEDDINGS_MODEL=all-MiniLM-L6-v2
+ENTITY_OVERLAP_THRESHOLD=0.85
+SEMANTIC_SIMILARITY_THRESHOLD=0.75
+MAX_FOLLOW_UP_QUESTIONS=5
+
+LOG_LEVEL=INFO
+API_PORT=8002
+\end{lstlisting}
+
+\section{Pagine Utili}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+\textbf{URL} & \textbf{Contenuto} \\
+\midrule
+\texttt{http://localhost:8002/docs}                   & Swagger UI -- documentazione interattiva API \\
+\texttt{http://localhost:8002/health}                 & Health check e stato servizi \\
+\texttt{http://localhost:8002/.well-known/agent.json} & Agent Card (A2A Protocol) \\
+\texttt{http://127.0.0.1:5678}                        & n8n -- workflow editor \\
+\texttt{http://127.0.0.1:5678/webhook/agent2-start}   & Loop interattivo (workflow attivo) \\
+\texttt{http://localhost:8080}                        & Kafka UI (solo con docker-compose.kafka.yml) \\
+\bottomrule
+\end{tabularx}
+\caption{Riferimenti URL dell'ambiente di sviluppo}
+\label{tab:urls}
+\end{table}
+
+% =============================================================================
+\chapter{Documentazione API (OpenAPI)}
+% =============================================================================
+
+\section{Accesso alla Documentazione}
+
+Grazie all'integrazione nativa FastAPI, la documentazione interattiva è
+disponibile non appena lo stack Docker è avviato:
+
+\begin{center}
+\texttt{http://localhost:8002/docs}
+\end{center}
+
+\section{Riepilogo Endpoint}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{llp{7cm}}
+\toprule
+\textbf{Metodo} & \textbf{Path} & \textbf{Descrizione} \\
+\midrule
+GET  & \texttt{/}                              & Informazioni agente e lista endpoint \\
+GET  & \texttt{/health}                        & Stato servizi e configurazione corrente \\
+GET  & \texttt{/config}                        & Parametri di configurazione (debug) \\
+POST & \texttt{/analyze}                       & Analisi completa del domain model \\
+GET  & \texttt{/source/files}                  & Lista file JSON in \texttt{input\_agent/} \\
+GET  & \texttt{/source/file?name=\ldots}       & Contenuto di un file di esempio \\
+POST & \texttt{/source/analyze-by-file}        & Analisi selezionando un file per nome \\
+GET  & \texttt{/.well-known/agent.json}        & Agent Card (A2A Protocol v0.3) \\
+POST & \texttt{/a2a/message/send}              & Invia domain model via A2A \\
+GET  & \texttt{/a2a/tasks}                     & Lista task A2A in memoria \\
+GET  & \texttt{/a2a/tasks/\{task\_id\}}        & Stato di un task specifico \\
+POST & \texttt{/a2a/tasks/\{task\_id\}/cancel} & Cancella un task in esecuzione \\
+\bottomrule
+\end{tabular}
+\caption{Riepilogo degli endpoint REST e A2A}
+\label{tab:endpoints}
+\end{table}
+\section{Funzionalità Swagger UI}
+
+L'interfaccia Swagger (\texttt{/docs}) permette di:
+\begin{itemize}
+  \item \textbf{Esplorare:} Visualizzare tutti gli endpoint con schema
+        di request/response.
+  \item \textbf{Testare:} Eseguire chiamate reali direttamente dal browser
+        con la funzione \textit{Try it out}, visualizzando codici HTTP e
+        tempi di risposta.
+  \item \textbf{Validare:} Verificare la struttura JSON del domain model
+        tramite lo schema OpenAPI generato automaticamente.
+  \item \textbf{Integrare:} Scaricare la specifica OpenAPI in formato JSON
+        o YAML per generare client SDK in qualsiasi linguaggio.
+\end{itemize}
+
+La documentazione è sempre sincronizzata con i modelli dati del backend,
+garantendo che nessun endpoint sia non documentato.
+
+% =============================================================================
+\chapter{Troubleshooting}
+% =============================================================================
+
+\section{Problemi di Avvio}
+
+\subsection{Container agent2-api non diventa \texttt{healthy}}
+
+\begin{technicalbox}{Diagnosi e Risoluzione}
+\textbf{Sintomo:} \texttt{docker ps} mostra \texttt{unhealthy} o il container
+si riavvia in loop.
+
+\textbf{Causa più comune:} Ollama non è raggiungibile da dentro il container.
+
+\textbf{Diagnosi:}
+\begin{lstlisting}[language=bash]
+docker logs agent2-api        # cerca errori di connessione
+curl http://localhost:11434   # verifica che Ollama sia attivo sull'host
+\end{lstlisting}
+
+\textbf{Soluzioni:}
+\begin{enumerate}
+  \item Avvia Ollama: \texttt{ollama serve}
+  \item Verifica che \texttt{OLLAMA\_BASE\_URL=http://host.docker.internal:11434}
+        sia impostato nel \texttt{.env}
+  \item Su Linux potrebbe essere necessario usare l'IP dell'host:
+        \texttt{OLLAMA\_BASE\_URL=http://172.17.0.1:11434}
+\end{enumerate}
+\end{technicalbox}
+
+\subsection{Errore \texttt{model 'qwen2.5:14b' not found}}
+
+\begin{technicalbox}{Diagnosi e Risoluzione}
+\textbf{Causa:} Il modello non è stato scaricato in Ollama.
+
+\textbf{Soluzione:}
+\begin{lstlisting}[language=bash]
+ollama pull qwen2.5:14b        # ~9 GB, richiede connessione internet
+ollama list                   # verifica che qwen2.5:14b sia presente
+\end{lstlisting}
+Per usare un modello alternativo, modifica \texttt{OLLAMA\_MODEL} nel
+\texttt{.env} (es. \texttt{llama3:8b}, \texttt{phi3:mini}).
+\end{technicalbox}
+
+\subsection{n8n non carica il workflow}
+
+\begin{technicalbox}{Diagnosi e Risoluzione}
+\textbf{Sintomo:} \texttt{http://127.0.0.1:5678/webhook/agent2-start} restituisce 404.
+
+\textbf{Causa:} Il workflow non è stato importato o attivato.
+
+\textbf{Passi:}
+\begin{enumerate}
+  \item Apri \texttt{http://127.0.0.1:5678} nel browser
+  \item Login con le credenziali di default (configurate nella prima esecuzione)
+  \item Vai su \textit{Workflows} $\rightarrow$ \textit{Import from file}
+  \item Carica \texttt{n8n/workflow\_complete\_loop.json}
+  \item Attiva il workflow con il toggle in alto a destra
+\end{enumerate}
+\end{technicalbox}
+
+\section{Problemi di Analisi}
+
+\subsection{L'analisi restituisce sempre \texttt{VALID} (nessun issue)}
+
+\begin{technicalbox}{Diagnosi e Risoluzione}
+\textbf{Cause possibili:}
+\begin{itemize}
+  \item Il domain model inviato è genuinamente valido
+  \item La soglia \texttt{ENTITY\_OVERLAP\_THRESHOLD} (default: 0.85) è troppo alta
+  \item Il modello embeddings non è stato caricato correttamente
+\end{itemize}
+
+\textbf{Test di verifica:}
+\begin{lstlisting}[language=bash]
+# Testa con il file di esempio che contiene issue noti
+curl -X POST http://localhost:8002/source/analyze-by-file \
+     -H "Content-Type: application/json" \
+     -d '{"filename": "example_bad.json", "use_llm": false}'
+# Atteso: issue rilevati per ogni tipologia
+\end{lstlisting}
+
+\textbf{Abbassa le soglie nel .env se necessario:}
+\begin{lstlisting}[language=bash]
+ENTITY_OVERLAP_THRESHOLD=0.75
+SEMANTIC_SIMILARITY_THRESHOLD=0.65
+\end{lstlisting}
+\end{technicalbox}
+\subsection{Timeout LLM (\texttt{use\_llm: true} molto lento)}
+
+\begin{technicalbox}{Diagnosi e Risoluzione}
+\textbf{Sintomo:} L'endpoint \texttt{/analyze} risponde dopo 90--120 secondi
+o va in timeout.
+
+\textbf{Causa:} Ollama sta usando la CPU invece della GPU, o la GPU è satura.
+
+\textbf{Diagnosi:}
+\begin{lstlisting}[language=bash]
+# Su Windows con GPU NVIDIA
+nvidia-smi
+# Verifica che ollama.exe usi la GPU (GPU-Util > 0 durante l'inferenza)
+\end{lstlisting}
+
+\textbf{Soluzioni:}
+\begin{enumerate}
+  \item Riavvia Ollama: assicurati che CUDA sia installato correttamente
+  \item Usa \texttt{use\_llm: false} per analisi senza LLM (più veloce, meno accurato)
+  \item Aumenta \texttt{OLLAMA\_TIMEOUT} nel \texttt{.env}:
+        \texttt{OLLAMA\_TIMEOUT=300}
+  \item Prova un modello più leggero: \texttt{OLLAMA\_MODEL=phi3:mini} (2.2 GB)
+\end{enumerate}
+\end{technicalbox}
+
+\subsection{Domande generate in lingua inglese invece di italiano}
+
+\begin{technicalbox}{Diagnosi e Risoluzione}
+\textbf{Causa:} Il modello LLM risponde nella lingua del domain model ricevuto.
+Se \texttt{Agent 1} produce il modello in inglese, le domande saranno in inglese.
+
+\textbf{Soluzione:} Aggiungi esplicitamente l'istruzione di lingua nel prompt
+del question generator modificando il campo \texttt{description} delle entità
+nel domain model, oppure configura Agent~1 per produrre modelli con
+\texttt{ubiquitousLanguage} in italiano.
+\end{technicalbox}
+\section{Problemi con Kafka (Pipeline Predisposta)}
+
+\subsection{Consumer non riceve messaggi da \texttt{agent1-output}}
+
+\begin{technicalbox}{Diagnosi e Risoluzione}
+\textbf{Diagnosi:}
+\begin{lstlisting}[language=bash]
+# Verifica stato topic e consumer lag
+docker exec kafka kafka-consumer-groups.sh \
+  --bootstrap-server localhost:9092 \
+  --describe --group agent2-consistency-analyzer
+
+# Controlla i log del consumer
+docker logs agent2-consumer
+\end{lstlisting}
+
+\textbf{Cause comuni:}
+\begin{enumerate}
+  \item Il topic \texttt{agent1-output} non esiste ancora: Agent~1 non ha ancora
+        pubblicato nessun messaggio.
+  \item Offset reset: se il consumer parte con \texttt{auto.offset.reset=earliest},
+        rileggerà tutti i messaggi storici; con \texttt{latest} solo i nuovi.
+  \item Kafka non è ancora pronto: attendi il health check
+        (\texttt{kafka-ui} su porta 8080 mostra lo stato del cluster).
+\end{enumerate}
+\end{technicalbox}
+
+\section{Diagnostica Rapida}
+
+\begin{table}[H]
+\centering
+\small
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{11pt}
+
+\begin{tabularx}{\textwidth}{
+  >{\raggedright\arraybackslash}p{4cm}
+  >{\raggedright\arraybackslash}p{5.2cm}
+  >{\raggedright\arraybackslash}X
+}
+\toprule
+\textbf{Sintomo} & \textbf{Comando diagnostico} & \textbf{Cosa cercare} \\
+\midrule
+Container non parte
+& \texttt{docker logs agent2-api}
+& errori di avvio dell'applicazione \\
+
+Ollama non raggiungibile
+& \texttt{curl http://localhost:11434}
+& risposta che indica che il servizio è attivo \\
+
+Analisi lenta
+& \texttt{nvidia-smi}
+& utilizzo GPU durante l'inferenza \\
+
+n8n webhook 404
+& \texttt{docker logs n8n}
+& workflow non attivato o webhook non registrato \\
+
+Output non salvato
+& \texttt{docker exec agent2-api ls /app/output\_agent/}
+& presenza dei file JSON attesi \\
+
+Kafka lag alto
+& Kafka UI (\texttt{http://localhost:8080})
+& consumer group lag elevato \\
+\bottomrule
+\end{tabularx}
+
+\caption{Guida rapida alla diagnostica}
+\label{tab:troubleshooting}
+\end{table}
+
+
+% -----------------------------------------------------------------------------
+\end{document}
